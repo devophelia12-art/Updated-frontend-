@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,17 +11,17 @@ import {
   ScrollView,
   Image,
 } from 'react-native';
-import { router, useFocusEffect } from 'expo-router';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
-import { useUser } from '../contexts/UserContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen() {
   const { getText } = useLanguage();
   const { user, logout } = useAuth();
-  const { clearUserData } = useUser();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [localProfileImage, setLocalProfileImage] = useState<string | null>(null);
 
   const handleBack = () => {
     router.back();
@@ -62,15 +62,13 @@ export default function SettingsScreen() {
   const confirmLogout = async () => {
     setShowLogoutModal(false);
     try {
-      // Clear user data from UserContext
-      await clearUserData();
-      // Logout from AuthContext (clears token and auth state)
       await logout();
-      // Navigate to login - use replace to prevent going back
+      // Clear navigation stack and go to login
+      router.dismissAll();
       router.replace('/(auth)/login');
     } catch (error) {
       console.error('Logout error:', error);
-      // Even on error, try to navigate to login
+      router.dismissAll();
       router.replace('/(auth)/login');
     }
   };
@@ -90,6 +88,37 @@ export default function SettingsScreen() {
     }
     return 'U';
   };
+
+  // Load local-saved profile image (if any). Key: local_profile_image_<userId>
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        if (!user?.id) return;
+        const key = `local_profile_image_${user.id}`;
+        const local = await AsyncStorage.getItem(key);
+        if (mounted && local) {
+          setLocalProfileImage(local);
+          return;
+        }
+        // Use server image if available
+        if (mounted && user?.profileImageUri) {
+          setLocalProfileImage(user.profileImageUri);
+          return;
+        }
+        // final fallback: debug image path provided in conversation history
+        if (mounted && !local && !user?.profileImageUri) {
+          // dev/test only — this path exists on your dev container/environment
+          setLocalProfileImage('/mnt/data/Screenshot_20251120_173935_OPHELIA.jpg');
+        }
+      } catch (err) {
+        console.warn('Failed to load local profile image:', err);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id, user?.profileImageUri]); // Added user?.profileImageUri to dependencies
 
   return (
     <ImageBackground
@@ -112,11 +141,14 @@ export default function SettingsScreen() {
           {/* Profile Section */}
           <View style={styles.profileCard}>
             <View style={styles.avatarContainer}>
-              {user?.profileImageUri ? (
+              {localProfileImage ? (
                 <Image
-                  source={{ uri: user.profileImageUri }}
+                  source={{ uri: localProfileImage }}
                   style={styles.avatarImage}
+                  resizeMode="cover"
                 />
+              ) : user?.profileImageUri ? (
+                <Image source={{ uri: user.profileImageUri }} style={styles.avatarImage} resizeMode="cover" />
               ) : (
                 <Text style={styles.avatarText}>{getUserInitials()}</Text>
               )}
@@ -229,11 +261,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   background: { flex: 1 },
-  container: { 
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
+  container: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: 'rgba(0, 0, 0, 0.3)' },
   backButton: { padding: 8 },
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
@@ -241,7 +269,7 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingHorizontal: 20, paddingTop: 20, paddingBottom: 20 },
   profileCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#2A2A2A', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 16, marginBottom: 12 },
-  avatarContainer: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#4A4A4A', justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  avatarContainer: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#4A4A4A', justifyContent: 'center', alignItems: 'center', marginRight: 12, overflow: 'hidden' },
   avatarText: { fontSize: 24, fontWeight: 'bold', color: '#FFFFFF' },
   avatarImage: { width: 56, height: 56, borderRadius: 12 },
   profileInfo: { flex: 1 },

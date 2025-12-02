@@ -91,27 +91,32 @@ class AuthAPI {
     return this.makeRequest(API_ENDPOINTS.AUTH.RESET_PASSWORD, { method: 'POST', body: JSON.stringify({ email, otp, new_password: newPassword }) });
   }
 
-  async sendConsentConfirmation(email: string, consentType: string) {
-    return this.makeRequest(API_ENDPOINTS.AUTH.SEND_CONSENT_CONFIRMATION, { 
-      method: 'POST', 
-      body: JSON.stringify({ email, consent_type: consentType }) 
-    });
-  }
-
   async logout() {
     this.userId = null;
     await this.removeToken();
   }
 
   async getProfile(userId: string): Promise<User> {
-    const profile = await this.makeRequest(API_ENDPOINTS.PROFILE(userId));
-    return {
-      id: profile.id,
-      fullName: profile.full_name,
-      email: profile.email,
-      phoneNumber: profile.phone_number,
-      profileImageUri: profile.profile_pic_url,
-    };
+    try {
+      const profile = await this.makeRequest(API_ENDPOINTS.PROFILE(userId));
+      return {
+        id: profile.id,
+        fullName: profile.full_name,
+        email: profile.email,
+        phoneNumber: profile.phone_number,
+        profileImageUri: profile.profile_pic_url,
+      };
+    } catch (error) {
+      console.error('Profile fetch error:', error);
+      // Return default user data if profile fetch fails
+      return {
+        id: userId,
+        fullName: 'User',
+        email: '',
+        phoneNumber: '',
+        profileImageUri: '',
+      };
+    }
   }
 
   async updateProfile(userId: string, data: UpdateProfileRequest): Promise<User> {
@@ -126,6 +131,67 @@ class AuthAPI {
       phoneNumber: profile.phone_number,
       profileImageUri: profile.profile_pic_url,
     };
+  }
+
+  async uploadProfilePicture(userId: string, imageUri: string): Promise<User> {
+    console.log('Uploading image:', imageUri, 'for user:', userId);
+    
+    const formData = new FormData();
+    formData.append('file', {
+      uri: imageUri,
+      type: 'image/jpeg',
+      name: 'profile.jpg',
+    } as any);
+    
+    const url = `${API_BASE_URL}/user/profile/${userId}/upload-pic`;
+    console.log('Upload URL:', url);
+    
+    try {
+      const token = await this.getToken();
+      console.log('Making upload request...');
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      
+      console.log('Upload response status:', response.status);
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}`;
+        try {
+          const data = await response.json();
+          console.log('Upload error response:', data);
+          errorMessage = data.detail || data.message || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const profile = await response.json();
+      console.log('Upload success, profile:', profile);
+      
+      const updatedUser = {
+        id: profile.id,
+        fullName: profile.full_name,
+        email: profile.email,
+        phoneNumber: profile.phone_number,
+        profileImageUri: profile.profile_pic_url,
+      };
+      
+      console.log('Returning updated user:', updatedUser);
+      return updatedUser;
+    } catch (error) {
+      console.error('Upload error:', error);
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+      }
+      throw error;
+    }
   }
 
 // =======================
@@ -166,7 +232,7 @@ private getAudioFormat(uri: string): { type: string; name: string } {
   return { type: 'audio/m4a', name: 'recording.m4a' };
 }
 
-async voiceChat(audioUri: string, voicePreference: string = 'male', language: string = 'en', conversationHistory?: string, retries: number = 2) {
+async voiceChat(audioUri: string, voicePreference: string = 'male', language: string = 'en') {
   const audioFormat = this.getAudioFormat(audioUri);
   console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
 
@@ -178,244 +244,123 @@ async voiceChat(audioUri: string, voicePreference: string = 'male', language: st
   } as any);
   formData.append('voice', voicePreference);
   formData.append('language', language);
-  if (conversationHistory) {
-    formData.append('conversation_history', conversationHistory);
-  }
   
   const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_CHAT}`;
   
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      if (attempt > 0) {
-        console.log(`Retrying voice chat request (attempt ${attempt + 1}/${retries + 1})`);
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      }
-      
-      console.log('Making voice chat request to:', url, 'with voice:', voicePreference, 'language:', language);
-      const token = await this.getToken();
-      
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60 second timeout (longer for voice chat)
-      
+  try {
+    console.log('Making voice chat request to:', url, 'with voice:', voicePreference, 'language:', language);
+    const token = await this.getToken();
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`;
       try {
-        const response = await fetch(url, {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal,
-          headers: {
-            // Don't set Content-Type - let fetch set it automatically with boundary
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          let errorMessage = `HTTP error! status: ${response.status}`;
-          try {
-            const data = await response.json();
-            errorMessage = data.detail || data.message || errorMessage;
-          } catch {
-            errorMessage = response.statusText || errorMessage;
-          }
-          throw new Error(errorMessage);
-        }
-        
-        return response.json();
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        
-        // If aborted due to timeout
-        if (fetchError.name === 'AbortError') {
-          throw new Error('Request timeout. The audio processing is taking too long. Please try again.');
-        }
-        throw fetchError;
+        const data = await response.json();
+        errorMessage = data.detail || data.message || errorMessage;
+      } catch {
+        errorMessage = response.statusText || errorMessage;
       }
-    } catch (error: any) {
-      // Handle network errors
-      if (error instanceof TypeError && error.message.includes('Network request failed')) {
-        console.error(`Network error (attempt ${attempt + 1}/${retries + 1}):`, error.message);
-        if (attempt < retries) {
-          continue; // Retry
-        }
-        throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
-      }
-      
-      // If it's the last attempt or not a network error, throw
-      if (attempt >= retries || !error.message.includes('Network request failed')) {
-        console.error('Voice chat error:', error);
-        throw error;
-      }
+      throw new Error(errorMessage);
     }
+    
+    return response.json();
+  } catch (error) {
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      console.error('Network error - Check if backend is running and URL is correct:', url);
+      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+    }
+    throw error;
   }
-  
-  throw new Error('Failed to process voice chat after retries');
 }
 
-async voiceToText(audioUri: string, retries: number = 2): Promise<string> {
+async voiceToText(audioUri: string) {
   const audioFormat = this.getAudioFormat(audioUri);
   console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
 
-  // Ensure the URI is properly formatted for React Native
-  // React Native FormData requires file:// prefix for local files
-  let fileUri = audioUri;
-  if (!fileUri.startsWith('file://') && !fileUri.startsWith('http://') && !fileUri.startsWith('https://')) {
-    fileUri = `file://${fileUri}`;
-  }
-  console.log('Formatted file URI:', fileUri);
-
   const formData = new FormData();
   formData.append('audio_file', {
-    uri: fileUri,
+    uri: audioUri,
     type: audioFormat.type,
     name: audioFormat.name,
   } as any);
   
   const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_TO_TEXT}`;
-  console.log('Voice-to-text URL:', url);
-  console.log('Audio format:', audioFormat);
   
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      if (attempt > 0) {
-        console.log(`Retrying voice-to-text request (attempt ${attempt + 1}/${retries + 1})`);
-        // Wait before retry (exponential backoff)
-        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
-      }
-      
-      console.log('Making voice-to-text request to:', url);
-      const token = await this.getToken();
-      
-      // Create AbortController for timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 35000); // 35 second timeout (increased)
-      
-      try {
-        // Check if backend is reachable first
-        try {
-          const healthCheck = await fetch(`${API_BASE_URL}/`, {
-            method: 'GET',
-            signal: AbortSignal.timeout(5000), // 5 second timeout for health check
-          });
-          console.log('Backend health check:', healthCheck.status);
-        } catch (healthError) {
-          console.warn('Backend health check failed:', healthError);
-          // Continue anyway, might be a CORS issue
-        }
-
-        const response = await fetch(url, {
-          method: 'POST',
-          body: formData,
-          signal: controller.signal,
-          headers: {
-            // Don't set Content-Type - let fetch set it automatically with boundary
-            ...(token && { Authorization: `Bearer ${token}` }),
-          },
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          let errorMessage = `HTTP error! status: ${response.status}`;
-          try {
-            const data = await response.json();
-            errorMessage = data.detail || data.message || errorMessage;
-          } catch {
-            const text = await response.text();
-            errorMessage = text || response.statusText || errorMessage;
-          }
-          throw new Error(errorMessage);
-        }
-        
-        const data = await response.json();
-        console.log('Voice-to-text response:', data);
-        return data.text || ''; // Return the transcribed text
-      } catch (fetchError: any) {
-        clearTimeout(timeoutId);
-        
-        // If aborted due to timeout
-        if (fetchError.name === 'AbortError' || fetchError.message?.includes('timeout')) {
-          if (attempt < retries) {
-            console.log('Request timeout, will retry...');
-            continue;
-          }
-          throw new Error('Request timeout. The audio file may be too large or the server is busy. Please try again.');
-        }
-        
-        // Check for network errors
-        if (fetchError instanceof TypeError || 
-            fetchError.message?.includes('Network request failed') ||
-            fetchError.message?.includes('Failed to fetch') ||
-            fetchError.message?.includes('network')) {
-          console.error(`Network error (attempt ${attempt + 1}/${retries + 1}):`, fetchError.message);
-          if (attempt < retries) {
-            continue; // Retry
-          }
-          throw new Error('Network request failed. Please check:\n1. Backend server is running\n2. Your device is connected to the same network\n3. IP address is correct (192.168.1.28:8000)');
-        }
-        
-        throw fetchError;
-      }
-    } catch (error: any) {
-      // Handle network errors
-      if (error instanceof TypeError && 
-          (error.message.includes('Network request failed') || 
-           error.message.includes('Failed to fetch'))) {
-        console.error(`Network error (attempt ${attempt + 1}/${retries + 1}):`, error.message);
-        if (attempt < retries) {
-          continue; // Retry
-        }
-        throw new Error('Network request failed. Please check your connection and ensure the backend server is running at http://192.168.1.28:8000');
-      }
-      
-      // If it's the last attempt or not a network error, throw
-      if (attempt >= retries) {
-        console.error('Voice-to-text error after all retries:', error);
-        throw error;
-      }
-      
-      // If it's a non-network error, throw immediately
-      if (!error.message?.includes('Network request failed') && 
-          !error.message?.includes('Failed to fetch')) {
-        console.error('Voice-to-text error (non-network):', error);
-        throw error;
-      }
-    }
-  }
-  
-  throw new Error('Failed to transcribe audio after retries');
-}
-
-async uploadProfilePicture(userId: string, file: { uri: string; name: string; type: string }) {
-  const formData = new FormData();
-
-  formData.append('file', {  // <-- must match FastAPI
-    uri: file.uri,
-    type: file.type,
-    name: file.name,
-  } as any);
-
-  const url = `${API_BASE_URL}/profile/${userId}/upload-pic`;
-
-  const token = await this.getToken();
-
   try {
+    console.log('Making voice-to-text request to:', url);
+    const token = await this.getToken();
     const response = await fetch(url, {
       method: 'POST',
       body: formData,
       headers: {
-        // Don't set Content-Type - let fetch set it automatically with boundary
+        'Content-Type': 'multipart/form-data',
         ...(token && { Authorization: `Bearer ${token}` }),
       },
     });
-
+    
     if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      throw new Error(errorData?.detail || `HTTP ${response.status}`);
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const data = await response.json();
+        errorMessage = data.detail || data.message || errorMessage;
+      } catch {
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
     }
+    
+    const data = await response.json();
+    return data.text || ''; // Return the transcribed text
+  } catch (error) {
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      console.error('Network error - Check if backend is running and URL is correct:', url);
+      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+    }
+    throw error;
+  }
+}
 
+async uploadProfilePicture(userId: string, imageUri: string) {
+  const formData = new FormData();
+  formData.append('file', {
+    uri: imageUri,
+    type: 'image/jpeg',
+    name: 'profile.jpg',
+  } as any);
+  
+  const url = `${API_BASE_URL}${API_ENDPOINTS.UPLOAD_PROFILE_PICTURE(userId)}`;
+  
+  try {
+    console.log('Uploading profile picture to:', url);
+    const token = await this.getToken();
+    const response = await fetch(url, {
+      method: 'POST',
+      body: formData,
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+    });
+    
+    if (!response.ok) {
+      let errorMessage = `HTTP error! status: ${response.status}`;
+      try {
+        const data = await response.json();
+        errorMessage = data.detail || data.message || errorMessage;
+      } catch {
+        errorMessage = response.statusText || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+    
     const data = await response.json();
     return {
       id: data.id,
@@ -423,13 +368,16 @@ async uploadProfilePicture(userId: string, file: { uri: string; name: string; ty
       email: data.email,
       phoneNumber: data.phone_number,
       profileImageUri: data.profile_pic_url,
-    };
+    } as User;
   } catch (error) {
-    console.error('Upload error:', error);
+    // Handle network errors
+    if (error instanceof TypeError && error.message.includes('Network request failed')) {
+      console.error('Network error - Check if backend is running and URL is correct:', url);
+      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+    }
     throw error;
   }
 }
-
 
 
   async setToken(token: string) { await AsyncStorage.setItem(TOKEN_KEY, token); }
@@ -453,11 +401,10 @@ interface AuthContextType extends AuthState {
   logout: () => Promise<void>;
   refreshProfile: () => Promise<void>;
   updateProfile: (data: UpdateProfileRequest) => Promise<any>;
-  uploadProfilePicture: (file: { uri: string; name: string; type: string }) => Promise<User>; // userId is taken from state.user.id
+  uploadProfilePicture: (imageUri: string) => Promise<User>; // userId is taken from state.user.id
   forgotPassword: (email: string) => Promise<any>;
   verifyOTP: (email: string, otp: string) => Promise<any>;
   resetPassword: (email: string, otp: string, newPassword: string) => Promise<any>;
-  sendConsentConfirmation: (email: string, consentType: string) => Promise<any>;
   chatGPT: (message: string, language?: string) => Promise<ChatResponse>;
   gemini: (message: string, language?: string) => Promise<ChatResponse>;
   grok: (message: string, language?: string) => Promise<ChatResponse>;
@@ -504,16 +451,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     await authAPI.logout();
-    // Clear all user-related data from AsyncStorage
+    // Clear app-related storage but keep onboarding data
     await AsyncStorage.multiRemove([
       TOKEN_KEY, 
       '@ophelia_chat_history',
-      '@ophelia_user_data',
-      '@ophelia_terms_accepted',
-      '@ophelia_selected_model',
-      '@ophelia_consent_checkbox_state',
-      'selectedVoice',
-      '@ophelia_selected_model'
+      '@ophelia_checkbox_state',
+      'selectedVoice'
     ]);
     setState({ isAuthenticated: false, user: null, loading: false });
   };
@@ -525,55 +468,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return updated;
   };
 
-const uploadProfilePicture = async (file: { uri: string; name: string; type: string }) => {
-  if (!state.user) throw new Error("No user logged in");
-
-  const fileUri = file.uri.startsWith('file://') ? file.uri : `file://${file.uri}`;
-  const formData = new FormData();
-  formData.append('file', { uri: fileUri, name: file.name, type: file.type } as any);
-
-  const url = `${API_BASE_URL}/user/profile/${state.user.id}/upload-pic`;
-  const token = await authAPI.getToken();
-
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        // Don't set Content-Type - let fetch set it automatically with boundary
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-
-    if (!response.ok) throw new Error('Upload failed');
-
-    const data = await response.json();
-
-    // Backend returns flat object with profile_pic_url, not nested in user
-    const profilePicUrl = data.profile_pic_url || data.url;
-    if (!profilePicUrl) {
-      throw new Error('Upload succeeded but no profile picture URL returned');
-    }
-
-    // Add timestamp to force reload
-    const uploadedUrl = `${profilePicUrl}?t=${Date.now()}`;
-
-    setState(prev => ({
-      ...prev,
-      user: { ...prev.user!, profileImageUri: uploadedUrl },
-    }));
-
-    return { ...state.user!, profileImageUri: uploadedUrl };
-  } catch (error) {
-    console.error('Upload error:', error);
-    throw new Error('Upload failed. Check network and backend server.');
-  }
-};
-
-
-
-
-
+  const uploadProfilePicture = async (imageUri: string) => {
+    if (!state.user) throw new Error('No user logged in');
+    const updated = await authAPI.uploadProfilePicture(state.user.id, imageUri);
+    const updatedUser = {
+      id: updated.id,
+      fullName: updated.full_name || updated.fullName,
+      email: updated.email,
+      phoneNumber: updated.phone_number || updated.phoneNumber,
+      profileImageUri: updated.profile_pic_url || updated.profileImageUri,
+    };
+    setState(prev => ({ ...prev, user: updatedUser }));
+    return updatedUser;
+  };
 
   // =======================
   // AI Chat Functions
@@ -618,10 +525,6 @@ const uploadProfilePicture = async (file: { uri: string; name: string; type: str
     return await authAPI.resetPassword(email, otp, newPassword);
   };
 
-  const sendConsentConfirmation = async (email: string, consentType: string) => {
-    return await authAPI.sendConsentConfirmation(email, consentType);
-  };
-
   return (
     <AuthContext.Provider
       value={{
@@ -635,7 +538,6 @@ const uploadProfilePicture = async (file: { uri: string; name: string; type: str
         forgotPassword,
         verifyOTP,
         resetPassword,
-        sendConsentConfirmation,
         chatGPT,
         gemini,
         grok,

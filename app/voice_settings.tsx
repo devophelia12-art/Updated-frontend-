@@ -70,23 +70,22 @@ export default function VoiceSettingsScreen() {
     >
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <View style={styles.mainContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Voice Settings</Text>
-            <View style={styles.placeholder} />
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+            <Text style={styles.backButtonText}>Back</Text>
+          </TouchableOpacity>
+        </View>
 
-          {/* Title Section */}
-          <View style={styles.titleSection}>
-            <Text style={styles.subtitle}>Customise voice output.</Text>
-          </View>
+        {/* Title Section */}
+        <View style={styles.titleSection}>
+          <Text style={styles.title}>Voice Settings</Text>
+          <Text style={styles.subtitle}>Customise voice output.</Text>
+        </View>
 
-          {/* Voice Selection Options */}
-          <View style={styles.voiceOptions}>
+        {/* Voice Selection Options */}
+        <View style={styles.voiceOptions}>
           <TouchableOpacity
             style={[
               styles.voiceCard,
@@ -112,10 +111,10 @@ export default function VoiceSettingsScreen() {
               <Ionicons name="checkmark-circle" size={24} color="#8B5CF6" />
             )}
           </TouchableOpacity>
-          </View>
+        </View>
 
-          {/* Select Button - Fixed at bottom */}
-          <View style={styles.buttonContainer}>
+        {/* Select Button - Fixed at bottom */}
+        <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={[
               styles.selectButton,
@@ -131,7 +130,6 @@ export default function VoiceSettingsScreen() {
               Select
             </Text>
           </TouchableOpacity>
-          </View>
         </View>
       </SafeAreaView>
     </ImageBackground>
@@ -145,35 +143,30 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  mainContainer: {
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    marginBottom: 0,
+    paddingTop: 20,
+    marginBottom: 20,
   },
   backButton: {
-    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  backButtonText: {
+    fontSize: 16,
     color: '#FFFFFF',
-  },
-  placeholder: {
-    width: 40,
+    marginLeft: 8,
   },
   titleSection: {
     paddingHorizontal: 20,
-    paddingTop: 20,
     marginBottom: 32,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,

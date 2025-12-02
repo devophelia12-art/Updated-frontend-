@@ -1,23 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
-  TextInput,
   TouchableOpacity,
   StyleSheet,
   ImageBackground,
-  Image,
+  SafeAreaView,
+  StatusBar,
+  TextInput,
+  ScrollView,
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
-  SafeAreaView,
+  Image,
+  Dimensions,
+  Keyboard,
 } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { clearOnboardingData } from '../../utils/onboarding';
 
 export default function RegisterScreen() {
+  const [dimensions, setDimensions] = useState(Dimensions.get('window'));
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -28,6 +34,25 @@ export default function RegisterScreen() {
   const [error, setError] = useState('');
   const { getText } = useLanguage();
   const { register } = useAuth();
+
+  const isTablet = dimensions.width >= 768;
+  const isSmallScreen = dimensions.width < 375;
+
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      setDimensions(window);
+    });
+    return () => subscription?.remove();
+  }, []);
+
+  useEffect(() => {
+    const showListener = Keyboard.addListener('keyboardDidShow', () => setKeyboardVisible(true));
+    const hideListener = Keyboard.addListener('keyboardDidHide', () => setKeyboardVisible(false));
+    return () => {
+      showListener.remove();
+      hideListener.remove();
+    };
+  }, []);
 
   const handleRegister = async () => {
     if (!fullName.trim() || !email.trim() || !password.trim()) {
@@ -47,374 +72,297 @@ export default function RegisterScreen() {
 
     setLoading(true);
     setError('');
-    
+
     try {
+      // Register the new user
       await register(email.trim(), password, fullName.trim(), confirmPassword);
+      
+      // Clear any existing onboarding data for fresh start
+      await clearOnboardingData();
+      
+      // Navigate to privacy terms (first-time setup)
       router.replace('/privacy_terms');
-    } catch (err: any) {
-      // Handle error properly - check if it's an Error object or a string
-      let errorMessage = 'Registration failed';
-      if (err) {
-        if (typeof err === 'string') {
-          errorMessage = err;
-        } else if (err instanceof Error) {
-          errorMessage = err.message || 'Registration failed';
-        } else if (err.message) {
-          errorMessage = err.message;
-        } else if (err.detail) {
-          errorMessage = err.detail;
-        } else if (typeof err === 'object' && err.toString) {
-          errorMessage = err.toString();
-        }
-      }
-      setError(errorMessage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleBackToLogin = () => {
-    router.back();
-  };
+  const handleBack = () => router.back();
+  const handleLogin = () => router.replace('./login');
 
-  const handleLoginLink = () => {
-    router.replace('./login');
-  };
+  const getScrollContainerStyle = () => ({
+    flexGrow: 1,
+    paddingHorizontal: isTablet ? 40 : isSmallScreen ? 16 : 20,
+    paddingTop: keyboardVisible ? 20 : (isTablet ? 60 : 90),
+    paddingBottom: keyboardVisible ? 20 : 40,
+    justifyContent: keyboardVisible ? 'flex-start' : 'center',
+  });
+
+  const getCardStyle = () => ({
+    width: '100%',
+    maxWidth: isTablet ? 500 : undefined,
+    alignSelf: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    borderRadius: isTablet ? 24 : 20,
+    padding: isTablet ? 32 : isSmallScreen ? 16 : 24,
+    elevation: 8,
+  });
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ImageBackground 
+    <SafeAreaView style={styles.safeArea}>
+      <ImageBackground
         source={require('@/assets/images/background.png')}
-        style={styles.backgroundImage}
+        style={styles.background}
         resizeMode="cover"
       >
-        <KeyboardAvoidingView 
+        <TouchableOpacity onPress={handleBack} style={styles.backBtn}>
+          <Ionicons name="arrow-back" size={isTablet ? 28 : 26} color="white" />
+          <Text style={styles.backBtnText}>{getText('back')}</Text>
+        </TouchableOpacity>
+
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={styles.keyboardView}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
         >
-          <ScrollView 
-            contentContainerStyle={styles.scrollContent}
+          <ScrollView
+            contentContainerStyle={getScrollContainerStyle()}
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
+            bounces={false}
           >
-            <View style={styles.content}>
-              {/* Back Button */}
-              <View style={styles.header}>
-                <TouchableOpacity onPress={handleBackToLogin} style={styles.backButton}>
-                  <Ionicons name="arrow-back" size={24} color="white" />
-                  <Text style={styles.backButtonText}>{getText('back')}</Text>
-                </TouchableOpacity>
-              </View>
+            <View style={getCardStyle()}>
+              {!keyboardVisible && (
+                <View style={styles.brandingSection}>
+                  <Image
+                    source={require('@/assets/images/ophelia logo.png')}
+                    style={styles.logo}
+                    resizeMode="contain"
+                  />
+                  <Text style={styles.title}>{getText('createAccount')}</Text>
+                  <Text style={styles.subtitle}>{getText('joinOphellia')}</Text>
+                </View>
+              )}
 
-              {/* Main Content Card */}
-              <View style={styles.card}>
-          {/* Header */}
-          <View style={styles.brandingSection}>
-            <View style={styles.logoContainer}>
-              <Image 
-                source={require('@/assets/images/ophelia logo.png')}
-                style={styles.logoImage}
-                resizeMode="contain"
-              />
-            </View>
-            <Text style={styles.title}>{getText('createAccount')}</Text>
-            <Text style={styles.subtitle}>{getText('joinOphellia')}</Text>
-          </View>
-
-          {/* Input Fields */}
-          <View style={styles.inputSection}>
-            {/* Full Name Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>{getText('fullName')}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={getText('enterNamePlaceholder')}
-                  placeholderTextColor="#9CA3AF"
+              <View style={styles.inputSection}>
+                <InputField
+                  label={getText('fullName')}
+                  icon="person-outline"
                   value={fullName}
-                  onChangeText={setFullName}
-                  autoCapitalize="words"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  textContentType="none"
-                  importantForAutofill="no"
+                  setValue={setFullName}
+                  placeholder={getText('enterNamePlaceholder')}
+                  isTablet={isTablet}
+                  isSmallScreen={isSmallScreen}
                 />
-              </View>
-            </View>
 
-            {/* Email Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>{getText('email')}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={getText('enterEmailPlaceholder')}
-                  placeholderTextColor="#9CA3AF"
+                <InputField
+                  label={getText('email')}
+                  icon="mail-outline"
                   value={email}
-                  onChangeText={setEmail}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  autoComplete="off"
-                  textContentType="none"
-                  importantForAutofill="no"
+                  setValue={setEmail}
+                  placeholder={getText('enterEmailPlaceholder')}
+                  email
+                  isTablet={isTablet}
+                  isSmallScreen={isSmallScreen}
                 />
-              </View>
-            </View>
 
-            {/* Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>{getText('password')}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={getText('enterPasswordPlaceholder')}
-                  placeholderTextColor="#9CA3AF"
+                <PasswordField
+                  label={getText('password')}
                   value={password}
-                  onChangeText={setPassword}
-                  secureTextEntry={!showPassword}
-                  autoComplete="off"
-                  textContentType="none"
-                  importantForAutofill="no"
-                  passwordRules=""
+                  setValue={setPassword}
+                  visible={showPassword}
+                  toggle={() => setShowPassword(!showPassword)}
+                  placeholder={getText('enterPasswordPlaceholder')}
+                  isTablet={isTablet}
+                  isSmallScreen={isSmallScreen}
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword(!showPassword)}
-                  style={styles.eyeIcon}
-                >
-                  <Ionicons 
-                    name={showPassword ? "eye-off-outline" : "eye-outline"} 
-                    size={20} 
-                    color="#9CA3AF" 
-                  />
-                </TouchableOpacity>
-              </View>
-            </View>
 
-            {/* Confirm Password Input */}
-            <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>{getText('confirmPassword')}</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
-                <TextInput
-                  style={styles.textInput}
-                  placeholder={getText('confirmPasswordPlaceholder')}
-                  placeholderTextColor="#9CA3AF"
+                <PasswordField
+                  label={getText('confirmPassword')}
                   value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  secureTextEntry={!showConfirmPassword}
-                  autoComplete="off"
-                  textContentType="none"
-                  importantForAutofill="no"
-                  passwordRules=""
+                  setValue={setConfirmPassword}
+                  visible={showConfirmPassword}
+                  toggle={() => setShowConfirmPassword(!showConfirmPassword)}
+                  placeholder={getText('confirmPasswordPlaceholder')}
+                  isTablet={isTablet}
+                  isSmallScreen={isSmallScreen}
                 />
-                <TouchableOpacity
-                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                  style={styles.eyeIcon}
-                >
-                  <Ionicons 
-                    name={showConfirmPassword ? "eye-off-outline" : "eye-outline"} 
-                    size={20} 
-                    color="#9CA3AF" 
-                  />
+
+                {!!error && (
+                  <View style={styles.errorBox}>
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+              </View>
+
+              <TouchableOpacity
+                style={[styles.createBtn, loading && { opacity: 0.5 }]}
+                onPress={handleRegister}
+                disabled={loading}
+              >
+                <Text style={styles.createBtnText}>
+                  {loading ? 'Creating Account...' : getText('createAccountButton')}
+                </Text>
+              </TouchableOpacity>
+
+              <View style={styles.loginRow}>
+                <Text style={styles.loginText}>{getText('alreadyHaveAccount')}</Text>
+                <TouchableOpacity onPress={handleLogin}>
+                  <Text style={styles.loginLink}>{getText('login')}</Text>
                 </TouchableOpacity>
               </View>
-            </View>
-
-            {/* Error Message */}
-            {error ? (
-              <View style={styles.errorContainer}>
-                <Text style={styles.errorText}>
-                  {error === 'undefined is not a function' 
-                    ? 'An error occurred. Please try again.' 
-                    : error}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-
-          {/* Action Buttons */}
-          <View style={styles.buttonSection}>
-            {/* Create Account Button */}
-            <TouchableOpacity 
-              style={[styles.createAccountButton, loading && styles.createAccountButtonDisabled]} 
-              onPress={handleRegister}
-              disabled={loading}
-            >
-              <Text style={styles.createAccountButtonText}>
-                {loading ? 'Creating Account...' : getText('createAccountButton')}
-              </Text>
-            </TouchableOpacity>
-
-            {/* Login Link */}
-            <View style={styles.loginLinkContainer}>
-              <Text style={styles.loginText}>{getText('alreadyHaveAccount')} </Text>
-              <TouchableOpacity onPress={handleLoginLink}>
-                <Text style={styles.loginLink}>{getText('login')}</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
             </View>
           </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
     </SafeAreaView>
   );
+
+  function InputField({ label, icon, value, setValue, placeholder, email, isTablet, isSmallScreen }) {
+    return (
+      <View style={[styles.inputContainer, { marginBottom: isTablet ? 20 : isSmallScreen ? 12 : 18 }]}>
+        <Text style={[styles.inputLabel, { fontSize: isTablet ? 16 : isSmallScreen ? 14 : 15 }]}>{label}</Text>
+        <View style={[styles.inputBox, {
+          borderRadius: isTablet ? 16 : 12,
+          paddingHorizontal: isTablet ? 20 : 15,
+          paddingVertical: isTablet ? 18 : isSmallScreen ? 12 : 14,
+        }]}>
+          <Ionicons name={icon} size={isTablet ? 24 : 20} color="#9CA3AF" style={{ marginRight: 10 }} />
+          <TextInput
+            style={[styles.textInput, { fontSize: isTablet ? 18 : isSmallScreen ? 14 : 16 }]}
+            placeholder={placeholder}
+            placeholderTextColor="#9CA3AF"
+            value={value}
+            onChangeText={setValue}
+            autoCapitalize={email ? 'none' : 'words'}
+            keyboardType={email ? 'email-address' : 'default'}
+          />
+        </View>
+      </View>
+    );
+  }
+
+  function PasswordField({ label, value, setValue, visible, toggle, placeholder, isTablet, isSmallScreen }) {
+    return (
+      <View style={[styles.inputContainer, { marginBottom: isTablet ? 20 : isSmallScreen ? 12 : 18 }]}>
+        <Text style={[styles.inputLabel, { fontSize: isTablet ? 16 : isSmallScreen ? 14 : 15 }]}>{label}</Text>
+        <View style={[styles.inputBox, {
+          borderRadius: isTablet ? 16 : 12,
+          paddingHorizontal: isTablet ? 20 : 15,
+          paddingVertical: isTablet ? 18 : isSmallScreen ? 12 : 14,
+        }]}>
+          <Ionicons name="lock-closed-outline" size={isTablet ? 24 : 20} color="#9CA3AF" style={{ marginRight: 10 }} />
+          <TextInput
+            style={[styles.textInput, { fontSize: isTablet ? 18 : isSmallScreen ? 14 : 16 }]}
+            placeholder={placeholder}
+            placeholderTextColor="#9CA3AF"
+            value={value}
+            onChangeText={setValue}
+            secureTextEntry={!visible}
+          />
+          <TouchableOpacity onPress={toggle}>
+            <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={isTablet ? 24 : 20} color="#9CA3AF" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 }
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
+    flex: 1,
+    backgroundColor: '#000',
+  },
+  background: {
     flex: 1,
   },
-  backgroundImage: {
-    flex: 1,
-    width: '100%',
-    height: '100%',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 40,
-  },
-  content: {
-    width: '100%',
-    alignItems: 'center',
-  },
-  card: {
-    backgroundColor: '#000000',
-    borderRadius: 20,
-    padding: 24,
-    width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 10,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  header: {
+  backBtn: {
     position: 'absolute',
-    top: 60,
-    left: 20,
-    zIndex: 1,
-  },
-  backButton: {
+    top: 20,
+    left: 15,
+    zIndex: 20,
     flexDirection: 'row',
     alignItems: 'center',
   },
-  backButtonText: {
-    color: 'white',
-    fontSize: 16,
-    marginLeft: 8,
+  backBtnText: { 
+    color: 'white', 
+    marginLeft: 8, 
+    fontSize: 16 
   },
   brandingSection: {
     alignItems: 'center',
-    marginBottom: 32,
+    marginBottom: 30,
   },
-  logoContainer: {
-    marginBottom: 16,
+  logo: { 
+    width: 80, 
+    height: 80 
   },
-  logoImage: {
-    width: 80,
-    height: 80,
+  title: { 
+    color: '#FFF', 
+    fontSize: 28, 
+    fontWeight: 'bold', 
+    marginTop: 10 
   },
-  title: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 8,
+  subtitle: { 
+    color: '#CCC', 
+    fontSize: 14, 
+    marginTop: 4 
   },
-  subtitle: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    opacity: 0.8,
+  inputSection: { 
+    marginBottom: 30 
   },
-  inputSection: {
-    marginBottom: 32,
+  inputContainer: {},
+  inputLabel: { 
+    color: 'white', 
+    marginBottom: 8 
   },
-  inputContainer: {
-    marginBottom: 20,
-  },
-  inputLabel: {
-    fontSize: 16,
-    color: '#FFFFFF',
-    marginBottom: 8,
-    fontWeight: '500',
-  },
-  inputWrapper: {
+  inputBox: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#1F2937',
-    borderRadius: 12,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
     borderWidth: 1,
     borderColor: '#374151',
   },
-  inputIcon: {
-    marginRight: 12,
+  textInput: { 
+    flex: 1, 
+    color: 'white' 
   },
-  textInput: {
-    flex: 1,
-    fontSize: 16,
-    color: '#FFFFFF',
+  errorBox: {
+    backgroundColor: '#EF4444',
+    padding: 12,
+    borderRadius: 10,
+    marginTop: 10,
   },
-  eyeIcon: {
-    padding: 4,
+  errorText: { 
+    color: 'white', 
+    textAlign: 'center' 
   },
-  buttonSection: {
-    gap: 20,
-    marginTop: 20,
-  },
-  createAccountButton: {
-    backgroundColor: '#FFFFFF',
+  createBtn: {
+    backgroundColor: '#FFF',
+    paddingVertical: 14,
     borderRadius: 12,
-    paddingVertical: 16,
     alignItems: 'center',
   },
-  createAccountButtonText: {
-    color: '#000000',
-    fontSize: 16,
-    fontWeight: 'bold',
+  createBtnText: { 
+    color: '#000', 
+    fontWeight: 'bold', 
+    fontSize: 16 
   },
-  loginLinkContainer: {
+  loginRow: {
+    marginTop: 18,
     flexDirection: 'row',
     justifyContent: 'center',
-    alignItems: 'center',
   },
-  loginText: {
-    color: '#FFFFFF',
-    fontSize: 16,
+  loginText: { 
+    color: '#FFF', 
+    fontSize: 15 
   },
-  loginLink: {
-    color: '#8B5CF6',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  errorContainer: {
-    backgroundColor: '#EF4444',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 16,
-  },
-  errorText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  createAccountButtonDisabled: {
-    opacity: 0.6,
+  loginLink: { 
+    color: '#8B5CF6', 
+    fontSize: 15, 
+    marginLeft: 5 
   },
 });

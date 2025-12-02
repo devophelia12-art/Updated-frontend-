@@ -28,18 +28,17 @@ export default function PrivacyTermsViewScreen() {
     >
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <View style={styles.mainContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Privacy & Terms</Text>
-            <View style={styles.placeholder} />
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Privacy & Terms</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-          {/* Content */}
-          <ScrollView 
+        {/* Content */}
+        <ScrollView 
           style={styles.content} 
           contentContainerStyle={styles.contentContainer}
           showsVerticalScrollIndicator={true}
@@ -126,8 +125,7 @@ export default function PrivacyTermsViewScreen() {
             Email: privacy@ashel.ai{'\n'}
             Address: Las Vegas, Nevada, USA
           </Text>
-          </ScrollView>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </ImageBackground>
   );
@@ -139,11 +137,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-  },
-  mainContainer: {
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',

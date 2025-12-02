@@ -1,6 +1,6 @@
 {
   "cli": {
-    "version": ">= 16.27.0",
+    "version": ">= 16.28.0",
     "appVersionSource": "remote"
   },
   "build": {
@@ -9,7 +9,11 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      // Add the following line to build an APK instead of an AAB
+      "android": {
+        "buildType": "apk"
+      }
     },
     "production": {
       "autoIncrement": true

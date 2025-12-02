@@ -12,34 +12,24 @@ import {
 import { router, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
-import { useAuth } from '../contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useSearchParams } from 'expo-router/build/hooks';
 
 export default function PrivacyTermsScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const [agreedToVoiceProcessing, setAgreedToVoiceProcessing] = useState(false);
   const { getText } = useLanguage();
-  const { user, sendConsentConfirmation } = useAuth();
   const router = useRouter();
+const handleAcceptTerms = async () => {
+  if (!agreedToTerms || !agreedToVoiceProcessing) return;
   
-  const handleAcceptTerms = async () => {
-    if (!agreedToTerms || !agreedToVoiceProcessing) return;
-    
+  try {
     await AsyncStorage.setItem('@ophelia_terms_accepted', 'true');
-    
-    // Send email confirmation if user is logged in
-    if (user?.email) {
-      try {
-        await sendConsentConfirmation(user.email, 'Privacy Terms');
-      } catch (error) {
-        console.error('Failed to send consent confirmation email:', error);
-        // Don't block the flow if email fails
-      }
-    }
-    
+    console.log('Terms saved successfully');
     router.replace('/ai_model');
-  };
+  } catch (error) {
+    console.error('Error saving terms:', error);
+  }
+};
 
 
 
@@ -73,7 +63,7 @@ export default function PrivacyTermsScreen() {
             {/* Section 1: Introduction */}
             <Text style={styles.sectionNumber}>1. Introduction</Text>
             <Text style={styles.sectionText}>
-              GLK Holdings LLC (&quot;Ophelia,&quot; &quot;we,&quot; &quot;our,&quot; or &quot;us&quot;) respects your privacy. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use the Ophelia ClipOn smart glasses, the Ophelia mobile app, or any other related services (collectively, the &quot;Services&quot;). By using our Services, you consent to the terms of this Privacy Policy.
+              GLK Holdings LLC ("Ophelia," "we," "our," or "us") respects your privacy. This Privacy Policy explains how we collect, use, disclose, and protect your personal information when you use the Ophelia ClipOn smart glasses, the Ophelia mobile app, or any other related services (collectively, the "Services"). By using our Services, you consent to the terms of this Privacy Policy.
             </Text>
 
             {/* Section 2: Information We Collect */}
@@ -90,7 +80,7 @@ export default function PrivacyTermsScreen() {
             
             <Text style={styles.subsectionTitle}>(c) Audio and Voice Data</Text>
             <Text style={styles.sectionText}>
-              Voice commands are processed securely to deliver real-time responses. Unless you explicitly enable &quot;Conversation History,&quot; Ophelia does not store raw audio recordings.
+              Voice commands are processed securely to deliver real-time responses. Unless you explicitly enable "Conversation History," Ophelia does not store raw audio recordings.
             </Text>
             
             <Text style={styles.subsectionTitle}>(d) Diagnostic and Performance Data</Text>

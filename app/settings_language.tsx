@@ -47,18 +47,17 @@ export default function SettingsLanguageScreen() {
     >
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <View style={styles.mainContainer}>
-          {/* Header */}
-          <View style={styles.header}>
-            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Select Language</Text>
-            <View style={styles.placeholder} />
-          </View>
+        {/* Header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="white" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Select Language</Text>
+          <View style={styles.placeholder} />
+        </View>
 
-          {/* Main Content */}
-          <View style={styles.mainContent}>
+        {/* Main Content */}
+        <View style={styles.mainContent}>
           {/* Subtitle */}
           <Text style={styles.subtitle}>Choose your preferred language</Text>
 
@@ -83,14 +82,13 @@ export default function SettingsLanguageScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          </View>
+        </View>
 
-          {/* Select Button - Fixed at bottom */}
-          <View style={styles.buttonContainer}>
+        {/* Select Button - Fixed at bottom */}
+        <View style={styles.buttonContainer}>
           <TouchableOpacity style={styles.selectButton} onPress={handleSelect}>
             <Text style={styles.selectButtonText}>Select</Text>
           </TouchableOpacity>
-          </View>
         </View>
       </SafeAreaView>
     </ImageBackground>
@@ -103,11 +101,6 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-  },
-  mainContainer: {
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
   },
   header: {
     flexDirection: 'row',

@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import { router } from 'expo-router';
 import { useAuth } from '../contexts/AuthContext';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SplashScreen() {
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -18,13 +17,7 @@ export default function SplashScreen() {
   const { isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
-    // Reset animation values
-    fadeAnim.setValue(0);
-    scaleAnim.setValue(0.5);
-    rotateAnim.setValue(0);
-
-    // Start animations immediately when component mounts
-    // Use parallel for simultaneous fade, scale, and rotate
+    // Start animations
     Animated.parallel([
       // Fade in animation
       Animated.timing(fadeAnim, {
@@ -32,7 +25,7 @@ export default function SplashScreen() {
         duration: 1000,
         useNativeDriver: true,
       }),
-      // Scale animation with spring effect
+      // Scale animation
       Animated.spring(scaleAnim, {
         toValue: 1,
         tension: 50,
@@ -47,36 +40,18 @@ export default function SplashScreen() {
       }),
     ]).start();
 
-    // Navigate based on auth status after animation completes (2.5 seconds)
-    const timer = setTimeout(async () => {
+    // Navigate based on auth status after 3 seconds
+    const timer = setTimeout(() => {
       if (!loading) {
-        const TERMS_KEY = '@ophelia_terms_accepted';
-        const MODEL_KEY = '@ophelia_selected_model';
-
-        if (!isAuthenticated) {
-          router.replace('/language');
+        if (isAuthenticated) {
+          router.replace('/ai_model');
         } else {
-          const acceptedTerms = await AsyncStorage.getItem(TERMS_KEY);
-          const selectedModel = await AsyncStorage.getItem(MODEL_KEY);
-
-          if (!acceptedTerms) {
-            router.replace('/privacy_terms');
-          } else if (!selectedModel) {
-            router.replace('/ai_model');
-          } else {
-            router.replace('/chat');
-          }
+          router.replace('/language');
         }
       }
-    }, 2500);
+    }, 3000);
 
-    return () => {
-      clearTimeout(timer);
-      // Clean up animations
-      fadeAnim.stopAnimation();
-      scaleAnim.stopAnimation();
-      rotateAnim.stopAnimation();
-    };
+    return () => clearTimeout(timer);
   }, [fadeAnim, scaleAnim, rotateAnim, isAuthenticated, loading]);
 
   const rotate = rotateAnim.interpolate({
@@ -115,7 +90,7 @@ export default function SplashScreen() {
           {/* Brand Name */}
           <Animated.View style={{ opacity: fadeAnim }}>
             <Text style={styles.brandName}>OPHELIA</Text>
-            <Text style={styles.versionText}>V 6.0</Text>
+            <Text style={styles.versionText}>V 1.0</Text>
           </Animated.View>
         </View>
       </ImageBackground>

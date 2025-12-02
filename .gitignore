@@ -5,8 +5,3 @@
 expo-env.d.ts
 # @end expo-cli
 node_modules
-
-# Large build files
-*.apk
-*.zip
-Frontend code Ophelia.zip

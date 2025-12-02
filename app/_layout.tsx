@@ -1,7 +1,7 @@
 // _layout.tsx
 import React, { useEffect, useState } from 'react';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useColorScheme } from '../hooks/use-color-scheme';
@@ -27,24 +27,27 @@ function AppNavigation() {
 
   useEffect(() => {
     const determineScreen = async () => {
-      // Always show splash screen first
-      setInitialScreen('splash');
+      if (!isAuthenticated) {
+        setInitialScreen('language');
+        return;
+      }
+
+      const acceptedTerms = await AsyncStorage.getItem(TERMS_KEY);
+      const selectedModel = await AsyncStorage.getItem(MODEL_KEY);
+
+      if (!acceptedTerms) {
+        setInitialScreen('privacy_terms');
+      } else if (!selectedModel) {
+        setInitialScreen('ai_model');
+      } else {
+        setInitialScreen('chat');
+      }
     };
 
     determineScreen();
-  }, []);
+  }, [isAuthenticated]);
 
-  // Show splash screen while loading or determining initial screen
-  if (loading || initialScreen === null) {
-    return (
-      <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-        <Stack initialRouteName="splash">
-          <Stack.Screen name="splash" options={{ headerShown: false }} />
-        </Stack>
-        <StatusBar style="auto" />
-      </ThemeProvider>
-    );
-  }
+  if (loading || initialScreen === null) return null; // optional: render a splash screen
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -56,14 +59,6 @@ function AppNavigation() {
         <Stack.Screen name="privacy_terms" options={{ headerShown: false }} />
         <Stack.Screen name="chat" options={{ headerShown: false }} />
         <Stack.Screen name="settings" options={{ headerShown: false }} />
-        <Stack.Screen name="account_settings" options={{ headerShown: false }} />
-        <Stack.Screen name="settings_ai_model" options={{ headerShown: false }} />
-        <Stack.Screen name="settings_language" options={{ headerShown: false }} />
-        <Stack.Screen name="voice_settings" options={{ headerShown: false }} />
-        <Stack.Screen name="user_consent" options={{ headerShown: false }} />
-        <Stack.Screen name="privacy_terms_view" options={{ headerShown: false }} />
-        <Stack.Screen name="choose_plan" options={{ headerShown: false }} />
-        <Stack.Screen name="payment" options={{ headerShown: false }} />
       </Stack>
       <StatusBar style="auto" />
     </ThemeProvider>

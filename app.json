@@ -13,13 +13,15 @@
       "infoPlist": {
         "NSMicrophoneUsageDescription": "This app needs access to microphone for voice recording and speech-to-text functionality.",
         "NSPhotoLibraryUsageDescription": "This app needs access to your photo library to change your profile picture.",
-        "NSCameraUsageDescription": "This app needs access to your camera to take photos for your profile picture."
-      }
+        "NSCameraUsageDescription": "This app needs access to your camera to take photos for your profile picture.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.anonymous.ophelia"
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#000000",
-        "foregroundImage": "./assets/images/ophelia logo.png"
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/images/splash-icon.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -49,8 +51,7 @@
           }
         }
       ],
-      "expo-audio",
-      "expo-asset"
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true,
@@ -59,7 +60,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "b70b41a8-2d16-4a9e-b399-9499983907da"
+        "projectId": "2ca33398-4279-4657-bc64-554d45cf6abb"
       }
     }
   }

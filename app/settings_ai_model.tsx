@@ -30,16 +30,12 @@ export default function SettingsAIModelScreen() {
     <ImageBackground source={require('../assets/images/background.png')} style={styles.background}>
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <View style={styles.mainContainer}>
-          <View style={styles.header}>
-            <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-              <Ionicons name="arrow-back" size={24} color="white" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>{getText('chooseAIModel')}</Text>
-            <View style={styles.placeholder} />
-          </View>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color="white" /></TouchableOpacity>
+          <Text style={styles.headerTitle}>{getText('chooseAIModel')}</Text>
+        </View>
 
-          {AI_MODELS.map(model => (
+        {AI_MODELS.map(model => (
           <TouchableOpacity key={model.id} style={[styles.modelCard, selectedModel === model.id && styles.selectedCard]} onPress={() => setSelectedModel(model.id)}>
             <Image source={model.icon} style={styles.modelIcon} />
             <View>
@@ -48,12 +44,11 @@ export default function SettingsAIModelScreen() {
             </View>
             {selectedModel === model.id && <Ionicons name="checkmark-circle" size={24} color="#8B5CF6" />}
           </TouchableOpacity>
-          ))}
+        ))}
 
-          <TouchableOpacity style={styles.selectButton} onPress={handleSave}>
-            <Text style={styles.selectButtonText}>{getText('select')}</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity style={styles.selectButton} onPress={handleSave}>
+          <Text style={styles.selectButtonText}>{getText('select')}</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     </ImageBackground>
   );
@@ -61,30 +56,9 @@ export default function SettingsAIModelScreen() {
 
 const styles = StyleSheet.create({
   background: { flex: 1 },
-  container: { flex: 1 },
-  mainContainer: {
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
-    paddingHorizontal: 20,
-  },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  backButton: {
-    padding: 8,
-  },
-  headerTitle: { 
-    fontSize: 20, 
-    fontWeight: 'bold', 
-    color: '#FFFFFF',
-  },
-  placeholder: {
-    width: 40,
-  },
+  container: { flex: 1, padding: 20 },
+  header: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  headerTitle: { flex: 1, color: '#fff', fontSize: 20, fontWeight: 'bold', textAlign: 'center' },
   modelCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 16, marginBottom: 12 },
   selectedCard: { borderColor: '#8B5CF6', borderWidth: 2, backgroundColor: 'rgba(139,92,246,0.1)' },
   modelIcon: { width: 40, height: 40, marginRight: 12 },

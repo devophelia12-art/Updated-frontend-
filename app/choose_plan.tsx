@@ -44,20 +44,18 @@ export default function ChoosePlanScreen() {
     >
       <StatusBar barStyle="light-content" />
       <SafeAreaView style={styles.container}>
-        <View style={styles.mainContainer}>
+        <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           {/* Header */}
           <View style={styles.header}>
             <TouchableOpacity onPress={handleBack} style={styles.backButton}>
               <Ionicons name="arrow-back" size={24} color="white" />
+              <Text style={styles.backButtonText}>Back</Text>
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Choose Your Plan</Text>
-            <View style={styles.placeholder} />
           </View>
-          
-          <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
 
           {/* Title Section */}
           <View style={styles.titleSection}>
+            <Text style={styles.title}>Choose Your Plan</Text>
             <Text style={styles.subtitle}>Select a plan that works best for you.</Text>
           </View>
 
@@ -166,8 +164,7 @@ export default function ChoosePlanScreen() {
             </TouchableOpacity>
             </View>
           </TouchableOpacity>
-          </ScrollView>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </LinearGradient>
   );
@@ -180,11 +177,6 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  mainContainer: {
-    flex: 1,
-    paddingTop: 60,
-    paddingBottom: 40,
-  },
   scrollView: {
     flex: 1,
   },
@@ -194,28 +186,26 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    backgroundColor: 'rgba(0, 0, 0, 0.3)',
-    marginBottom: 0,
+    marginBottom: 20,
   },
   backButton: {
-    padding: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
   },
-  headerTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
+  backButtonText: {
+    fontSize: 16,
     color: '#FFFFFF',
-  },
-  placeholder: {
-    width: 40,
+    marginLeft: 8,
   },
   titleSection: {
     marginBottom: 32,
-    paddingTop: 20,
+  },
+  title: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 14,
