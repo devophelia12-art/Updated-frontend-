@@ -26,6 +26,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '../config/api';
+import { testBackendConnection } from '../utils/testConnection';
 
 const STORAGE_KEY = '@ophelia_selected_model';
 
@@ -171,6 +172,7 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [selectedModel, setSelectedModel] = useState('grok');
+  const [isLoading, setIsLoading] = useState(false);
 
   // Voice assistant modal
   const [showVoiceModal, setShowVoiceModal] = useState(false);
@@ -360,7 +362,7 @@ export default function ChatScreen() {
 
   // ============== TEXT CHAT (UNCHANGED) ==============
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     const text = inputText.trim();
     if (!text) return;
 
@@ -368,21 +370,87 @@ export default function ChatScreen() {
 
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     const userMsg: Message = { id: Date.now().toString(), text, isUser: true, timestamp: now };
+    
+    // Add user message immediately
+    setMessages(prev => [...prev, userMsg]);
+    setInputText('');
 
-    const quick = getQuickResponse(text);
-    const aiText = quick || limitResponse(`You said: ${text}`, 80);
-    const aiMsg: Message = {
-      id: (Date.now() + 1).toString(),
-      text: aiText,
+    // Add typing indicator
+    const typingMsg: Message = {
+      id: 'typing',
+      text: '',
       isUser: false,
       timestamp: now,
+      isTyping: true,
     };
+    setMessages(prev => [...prev, typingMsg]);
 
-    setMessages(prev => [...prev, userMsg, aiMsg]);
-    setInputText('');
+    try {
+      // Check for quick response first
+      const quick = getQuickResponse(text);
+      let aiText: string;
+      
+      if (quick) {
+        aiText = quick;
+      } else {
+        // Make actual API call based on selected model
+        let response;
+        const language = selectedLanguage || 'en';
+        
+        switch (selectedModel) {
+          case 'chatgpt':
+            response = await auth?.chatGPT(text, language);
+            break;
+          case 'gemini':
+            response = await auth?.gemini(text, language);
+            break;
+          case 'grok':
+          default:
+            response = await auth?.grok(text, language);
+            break;
+        }
+        
+        aiText = response?.response || 'Sorry, I could not process your request.';
+      }
+
+      // Remove typing indicator and add AI response
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg.id !== 'typing');
+        const aiMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          text: limitResponse(aiText),
+          isUser: false,
+          timestamp: now,
+        };
+        return [...filtered, aiMsg];
+      });
+    } catch (error) {
+      console.error('Chat API error:', error);
+      // Remove typing indicator and show error
+      setMessages(prev => {
+        const filtered = prev.filter(msg => msg.id !== 'typing');
+        const errorMsg: Message = {
+          id: (Date.now() + 1).toString(),
+          text: 'Sorry, I\'m having trouble connecting. Please check your internet connection and try again.',
+          isUser: false,
+          timestamp: now,
+        };
+        return [...filtered, errorMsg];
+      });
+    }
   };
 
   const handleSettings = () => router.push('/settings');
+
+  // Test backend connection
+  const testConnection = async () => {
+    const result = await testBackendConnection();
+    Alert.alert(
+      result.success ? 'Connection Success' : 'Connection Failed',
+      `${result.message}\n\nURL: ${result.url}`,
+      [{ text: 'OK' }]
+    );
+  };
 
   // ============== SIMPLE MIC → TEXT (MIC ICON) ==============
 
@@ -745,6 +813,9 @@ export default function ChatScreen() {
       <SafeAreaView style={styles.container}>
         {/* Header */}
         <View style={styles.header}>
+          <TouchableOpacity onPress={testConnection} style={styles.testButton}>
+            <Ionicons name="wifi-outline" size={20} color="white" />
+          </TouchableOpacity>
           <View style={{ flex: 1, alignItems: 'center' }}>
             <Text style={styles.headerTitle}>OPHELIA</Text>
             <Text style={styles.headerSubtitle}>{selectedModel.toUpperCase()}</Text>
@@ -889,6 +960,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
   headerSubtitle: { fontSize: 13, color: '#D1D1D1', marginTop: 2 },
   settingsButton: { padding: 8 },
+  testButton: { padding: 8 },
 
   chatContainer: { flex: 1 },
   messagesContainer: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },

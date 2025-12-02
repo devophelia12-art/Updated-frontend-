@@ -10,7 +10,7 @@
     },
     "preview": {
       "distribution": "internal",
-      // Add the following line to build an APK instead of an AAB
+     
       "android": {
         "buildType": "apk"
       }
