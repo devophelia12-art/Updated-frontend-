@@ -26,6 +26,7 @@ export interface ChatResponse { message: string; response?: string; }
 // =======================
 class AuthAPI {
   private userId: string | null = null;
+  private currentSessionId: string | null = null;
 
   private async makeRequest(endpoint: string, options: RequestInit = {}) {
     const url = `${API_BASE_URL}${endpoint}`;
@@ -93,6 +94,7 @@ class AuthAPI {
 
   async logout() {
     this.userId = null;
+    this.currentSessionId = null;
     await this.removeToken();
   }
 
@@ -194,191 +196,185 @@ class AuthAPI {
     }
   }
 
-// =======================
-// AI Chat Functions
-// =======================
-async chatGPT(message: string, language: string = 'en') {
-  const body = { message, language };
-  return this.makeRequest(API_ENDPOINTS.CHAT.CHATGPT, { method: 'POST', body: JSON.stringify(body) });
-}
+  // =======================
+  // AI Chat Functions
+  // =======================
+  async chatGPT(message: string, language: string = 'en') {
+    const body = { message, language };
+    return this.makeRequest(API_ENDPOINTS.CHAT.CHATGPT, { method: 'POST', body: JSON.stringify(body) });
+  }
 
-async gemini(message: string, language: string = 'en') {
-  const body = { message, language };
-  return this.makeRequest(API_ENDPOINTS.CHAT.GEMINI, { method: 'POST', body: JSON.stringify(body) });
-}
+  async gemini(message: string, language: string = 'en') {
+    const body = { message, language };
+    return this.makeRequest(API_ENDPOINTS.CHAT.GEMINI, { method: 'POST', body: JSON.stringify(body) });
+  }
 
-async grok(message: string, language: string = 'en') {
-  const body = { message, language };
-  return this.makeRequest(API_ENDPOINTS.CHAT.GROK, { method: 'POST', body: JSON.stringify(body) });
-}
+  async grok(message: string, language: string = 'en') {
+    const body = { message, language };
+    return this.makeRequest(API_ENDPOINTS.CHAT.GROK, { method: 'POST', body: JSON.stringify(body) });
+  }
 
-// Helper method to detect audio format from URI
-private getAudioFormat(uri: string): { type: string; name: string } {
-  const uriLower = uri.toLowerCase();
-  if (uriLower.includes('.m4a') || uriLower.includes('.mp4')) {
+  // Helper method to detect audio format from URI
+  private getAudioFormat(uri: string): { type: string; name: string } {
+    const uriLower = uri.toLowerCase();
+    if (uriLower.includes('.m4a') || uriLower.includes('.mp4')) {
+      return { type: 'audio/m4a', name: 'recording.m4a' };
+    } else if (uriLower.includes('.mp3')) {
+      return { type: 'audio/mp3', name: 'recording.mp3' };
+    } else if (uriLower.includes('.webm')) {
+      return { type: 'audio/webm', name: 'recording.webm' };
+    } else if (uriLower.includes('.ogg')) {
+      return { type: 'audio/ogg', name: 'recording.ogg' };
+    } else if (uriLower.includes('.flac')) {
+      return { type: 'audio/flac', name: 'recording.flac' };
+    } else if (uriLower.includes('.wav')) {
+      return { type: 'audio/wav', name: 'recording.wav' };
+    }
+    // Default to m4a for mobile recordings (iOS/Android typically use M4A)
     return { type: 'audio/m4a', name: 'recording.m4a' };
-  } else if (uriLower.includes('.mp3')) {
-    return { type: 'audio/mp3', name: 'recording.mp3' };
-  } else if (uriLower.includes('.webm')) {
-    return { type: 'audio/webm', name: 'recording.webm' };
-  } else if (uriLower.includes('.ogg')) {
-    return { type: 'audio/ogg', name: 'recording.ogg' };
-  } else if (uriLower.includes('.flac')) {
-    return { type: 'audio/flac', name: 'recording.flac' };
-  } else if (uriLower.includes('.wav')) {
-    return { type: 'audio/wav', name: 'recording.wav' };
   }
-  // Default to m4a for mobile recordings (iOS/Android typically use M4A)
-  return { type: 'audio/m4a', name: 'recording.m4a' };
-}
 
-async voiceChat(audioUri: string, voicePreference: string = 'male', language: string = 'en') {
-  const audioFormat = this.getAudioFormat(audioUri);
-  console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
+  // Generate new session ID
+  private generateSessionId(): string {
+    return `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  }
 
-  const formData = new FormData();
-  formData.append('audio_file', {
-    uri: audioUri,
-    type: audioFormat.type,
-    name: audioFormat.name,
-  } as any);
-  formData.append('voice', voicePreference);
-  formData.append('language', language);
-  
-  const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_CHAT}`;
-  
-  try {
-    console.log('Making voice chat request to:', url, 'with voice:', voicePreference, 'language:', language);
-    const token = await this.getToken();
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-    
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
+  // Interrupt current session
+  async interruptCurrentSession() {
+    if (this.currentSessionId) {
       try {
-        const data = await response.json();
-        errorMessage = data.detail || data.message || errorMessage;
-      } catch {
-        errorMessage = response.statusText || errorMessage;
+        const formData = new FormData();
+        formData.append('session_id', this.currentSessionId);
+        
+        const response = await fetch(`${API_BASE_URL}/interrupt`, {
+          method: 'POST',
+          body: formData,
+        });
+        
+        console.log('Interruption request sent for session:', this.currentSessionId);
+        return await response.json();
+      } catch (error) {
+        console.log('Interrupt API call failed:', error);
+        return null;
       }
-      throw new Error(errorMessage);
     }
-    
-    return response.json();
-  } catch (error) {
-    // Handle network errors
-    if (error instanceof TypeError && error.message.includes('Network request failed')) {
-      console.error('Network error - Check if backend is running and URL is correct:', url);
-      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
-    }
-    throw error;
+    return null;
   }
-}
 
-async voiceToText(audioUri: string) {
-  const audioFormat = this.getAudioFormat(audioUri);
-  console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
+  async voiceChat(audioUri: string, voicePreference: string = 'male', language: string = 'en', sessionId?: string) {
+    const audioFormat = this.getAudioFormat(audioUri);
+    console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
 
-  const formData = new FormData();
-  formData.append('audio_file', {
-    uri: audioUri,
-    type: audioFormat.type,
-    name: audioFormat.name,
-  } as any);
-  
-  const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_TO_TEXT}`;
-  
-  try {
-    console.log('Making voice-to-text request to:', url);
-    const token = await this.getToken();
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
+    // Generate new session ID if not provided
+    const currentSessionId = sessionId || this.generateSessionId();
+    this.currentSessionId = currentSessionId;
+
+    const formData = new FormData();
+    formData.append('audio_file', {
+      uri: audioUri,
+      type: audioFormat.type,
+      name: audioFormat.name,
+    } as any);
+    formData.append('voice', voicePreference);
+    formData.append('language', language);
+    formData.append('session_id', currentSessionId);
     
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const data = await response.json();
-        errorMessage = data.detail || data.message || errorMessage;
-      } catch {
-        errorMessage = response.statusText || errorMessage;
+    const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_CHAT}`;
+    
+    try {
+      console.log('Making voice chat request to:', url, 'with session:', currentSessionId);
+      const token = await this.getToken();
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const data = await response.json();
+          errorMessage = data.detail || data.message || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
       }
-      throw new Error(errorMessage);
-    }
-    
-    const data = await response.json();
-    return data.text || ''; // Return the transcribed text
-  } catch (error) {
-    // Handle network errors
-    if (error instanceof TypeError && error.message.includes('Network request failed')) {
-      console.error('Network error - Check if backend is running and URL is correct:', url);
-      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
-    }
-    throw error;
-  }
-}
-
-async uploadProfilePicture(userId: string, imageUri: string) {
-  const formData = new FormData();
-  formData.append('file', {
-    uri: imageUri,
-    type: 'image/jpeg',
-    name: 'profile.jpg',
-  } as any);
-  
-  const url = `${API_BASE_URL}${API_ENDPOINTS.UPLOAD_PROFILE_PICTURE(userId)}`;
-  
-  try {
-    console.log('Uploading profile picture to:', url);
-    const token = await this.getToken();
-    const response = await fetch(url, {
-      method: 'POST',
-      body: formData,
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-    });
-    
-    if (!response.ok) {
-      let errorMessage = `HTTP error! status: ${response.status}`;
-      try {
-        const data = await response.json();
-        errorMessage = data.detail || data.message || errorMessage;
-      } catch {
-        errorMessage = response.statusText || errorMessage;
+      
+      const result = await response.json();
+      
+      // If response was interrupted, handle gracefully
+      if (result.status === 'interrupted') {
+        console.log('Voice chat was interrupted');
+        return {
+          user_text: 'Interrupted',
+          response_text: 'Please continue speaking...',
+          audio_url: null,
+          status: 'interrupted'
+        };
       }
-      throw new Error(errorMessage);
+      
+      return result;
+    } catch (error) {
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        console.error('Network error - Check if backend is running and URL is correct:', url);
+        throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+      }
+      throw error;
     }
-    
-    const data = await response.json();
-    return {
-      id: data.id,
-      fullName: data.full_name,
-      email: data.email,
-      phoneNumber: data.phone_number,
-      profileImageUri: data.profile_pic_url,
-    } as User;
-  } catch (error) {
-    // Handle network errors
-    if (error instanceof TypeError && error.message.includes('Network request failed')) {
-      console.error('Network error - Check if backend is running and URL is correct:', url);
-      throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
-    }
-    throw error;
   }
-}
 
+  async voiceToText(audioUri: string) {
+    const audioFormat = this.getAudioFormat(audioUri);
+    console.log('Detected audio format:', audioFormat, 'from URI:', audioUri);
+
+    const formData = new FormData();
+    formData.append('audio_file', {
+      uri: audioUri,
+      type: audioFormat.type,
+      name: audioFormat.name,
+    } as any);
+    
+    const url = `${API_BASE_URL}${API_ENDPOINTS.CHAT.VOICE_TO_TEXT}`;
+    
+    try {
+      console.log('Making voice-to-text request to:', url);
+      const token = await this.getToken();
+      const response = await fetch(url, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+      });
+      
+      if (!response.ok) {
+        let errorMessage = `HTTP error! status: ${response.status}`;
+        try {
+          const data = await response.json();
+          errorMessage = data.detail || data.message || errorMessage;
+        } catch {
+          errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+      
+      const data = await response.json();
+      return data.text || ''; // Return the transcribed text
+    } catch (error) {
+      // Handle network errors
+      if (error instanceof TypeError && error.message.includes('Network request failed')) {
+        console.error('Network error - Check if backend is running and URL is correct:', url);
+        throw new Error('Network request failed. Please check your connection and ensure the backend server is running.');
+      }
+      throw error;
+    }
+  }
 
   async setToken(token: string) { await AsyncStorage.setItem(TOKEN_KEY, token); }
   async getToken(): Promise<string | null> { return AsyncStorage.getItem(TOKEN_KEY); }
@@ -408,15 +404,15 @@ interface AuthContextType extends AuthState {
   chatGPT: (message: string, language?: string) => Promise<ChatResponse>;
   gemini: (message: string, language?: string) => Promise<ChatResponse>;
   grok: (message: string, language?: string) => Promise<ChatResponse>;
-  voiceChat: (audioUri: string, voicePreference?: string, language?: string) => Promise<any>;
+  voiceChat: (audioUri: string, voicePreference?: string, language?: string, sessionId?: string) => Promise<any>;
   voiceToText: (audioUri: string) => Promise<string>;
+  interruptCurrentSession: () => Promise<any>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [state, setState] = useState<AuthState>({ isAuthenticated: false, user: null, loading: true });
-
 
   useEffect(() => { checkAuthStatus(); }, []);
 
@@ -451,10 +447,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = async () => {
     await authAPI.logout();
-    // Clear app-related storage but keep onboarding data
+    // Clear all app-related storage
     await AsyncStorage.multiRemove([
       TOKEN_KEY, 
       '@ophelia_chat_history',
+      '@ophelia_selected_model',
+      '@ophelia_terms_accepted',
       '@ophelia_checkbox_state',
       'selectedVoice'
     ]);
@@ -503,14 +501,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return { message, response: res.response };
   };
   
-  const voiceChat = async (audioUri: string, voicePreference?: string, language?: string) => {
+  const voiceChat = async (audioUri: string, voicePreference?: string, language?: string, sessionId?: string) => {
     if (!state.user) throw new Error('User not logged in');
-    return await authAPI.voiceChat(audioUri, voicePreference, language);
+    return await authAPI.voiceChat(audioUri, voicePreference, language, sessionId);
   };
 
   const voiceToText = async (audioUri: string) => {
     if (!state.user) throw new Error('User not logged in');
     return await authAPI.voiceToText(audioUri);
+  };
+
+  const interruptCurrentSession = async () => {
+    return await authAPI.interruptCurrentSession();
   };
 
   const forgotPassword = async (email: string) => {
@@ -543,6 +545,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         grok,
         voiceChat,
         voiceToText,
+        interruptCurrentSession,
       }}
     >
       {children}

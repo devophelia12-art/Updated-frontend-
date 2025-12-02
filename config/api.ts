@@ -6,81 +6,79 @@
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
 
-// ============================================
-// IMPORTANT: For Physical Devices (Expo Go on iPhone/Android)
-// ============================================
-// If you're using Expo Go on a physical device, you MUST set your computer's local IP below.
-// 
-// To find your local IP address:
-// - Mac: Run `ipconfig getifaddr en0` in terminal (or `ifconfig | grep "inet "`)
-// - Windows: Run `ipconfig` in command prompt, look for "IPv4 Address"
-// - Linux: Run `hostname -I` or `ip addr show`
-// 
-// Look for something like: 192.168.1.100 or 192.168.0.105
-//
-// Example: If your computer's IP is 192.168.1.100, change the line below to:
-// const PHYSICAL_DEVICE_IP = '192.168.1.100';
-// ============================================
+// ===============================
+// PRODUCTION URL (LIVE SERVER)
+// ===============================
+const PRODUCTION_URL = "https://api.opheliaomni.ai";
 
-// ⚠️ SET THIS TO YOUR COMPUTER'S LOCAL IP ADDRESS WHEN USING EXPO GO ON PHYSICAL DEVICE
-// Leave as null for iOS Simulator or Android Emulator (they work with localhost/10.0.2.2)
-// const PHYSICAL_DEVICE_IP: string | null = '192.168.18.59';
-const PHYSICAL_DEVICE_IP = '10.53.240.116';
- // 👈 Your computer's local IP (detected automatically)
 
-// Determine the correct base URL based on platform and environment
+// ===============================
+// DEVELOPMENT (LOCAL DEVICE)
+// ===============================
+// ⚠️ Your computer's local IP for Expo Go on real device
+const PHYSICAL_DEVICE_IP: string | null = "192.168.18.12";
+
+
+// Base URL selector
 const getBaseURL = () => {
-  // If physical device IP is set, always use it (for Expo Go on physical devices)
+  // 👉 If app is running in PRODUCTION (APK / IPA / EAS Build)
+  if (!__DEV__) {
+    return PRODUCTION_URL;
+  }
+
+  // 👉 DEVELOPMENT mode below ↓↓↓↓↓↓↓↓↓↓
+
+  // Use local IP when testing on phone via Expo Go
   if (PHYSICAL_DEVICE_IP) {
     return `http://${PHYSICAL_DEVICE_IP}:8000`;
   }
 
-  // Check if running on physical device
   const isPhysicalDevice = Constants.isDevice && !Constants.isDeviceWeb;
-  
-  if (Platform.OS === 'android') {
-    // Android emulator uses 10.0.2.2 to access host machine's localhost
-    return isPhysicalDevice 
-      ? 'http://localhost:8000' // ⚠️ This won't work on physical device - set PHYSICAL_DEVICE_IP above!
-      : 'http://10.0.2.2:8000';
-  } else {
-    // iOS simulator can use localhost
+
+  if (Platform.OS === "android") {
     return isPhysicalDevice
-      ? 'http://localhost:8000' // ⚠️ This won't work on physical device - set PHYSICAL_DEVICE_IP above!
-      : 'http://localhost:8000';
+      ? "http://localhost:8000"
+      : "http://10.0.2.2:8000";
+  } else {
+    return isPhysicalDevice
+      ? "http://localhost:8000"
+      : "http://localhost:8000";
   }
 };
 
-// Backend base URL
+// Final BASE URL
 export const API_BASE_URL = getBaseURL();
 
-// WebSocket URL (converts http to ws)
-export const WS_BASE_URL = API_BASE_URL.replace('http://', 'ws://').replace('https://', 'wss://');
+// WebSocket URLs
+export const WS_BASE_URL = API_BASE_URL
+  .replace("http://", "ws://")
+  .replace("https://", "wss://");
+
 export const WS_URL = `${WS_BASE_URL}/ws`;
 
-// API endpoints - Matching backend API documentation
+
+// API Endpoints
 export const API_ENDPOINTS = {
-  // Auth endpoints
   AUTH: {
-    LOGIN: '/auth/login',
-    REGISTER: '/auth/register',
-    TOKEN: '/auth/token',
-    ME: '/auth/me',
-    FORGOT_PASSWORD: '/auth/forgot-password',
-    VERIFY_OTP: '/auth/verify-otp',
-    RESET_PASSWORD: '/auth/reset-password',
+    LOGIN: "/auth/login",
+    REGISTER: "/auth/register",
+    TOKEN: "/auth/token",
+    ME: "/auth/me",
+    FORGOT_PASSWORD: "/auth/forgot-password",
+    VERIFY_OTP: "/auth/verify-otp",
+    RESET_PASSWORD: "/auth/reset-password",
   },
-  // Profile endpoints
+
   PROFILE: (userId: string) => `/user/profile/${userId}`,
   UPDATE_PROFILE: (userId: string) => `/user/profile/${userId}`,
-  UPLOAD_PROFILE_PICTURE: (userId: string) => `/profile/${userId}/upload-pic`,
-  // AI Chat endpoints
+  UPLOAD_PROFILE_PICTURE: (userId: string) =>
+    `/profile/${userId}/upload-pic`,
+
   CHAT: {
-    CHATGPT: '/api/chatgpt/chat',
-    GEMINI: '/api/gemini/chat',
-    GROK: '/api/grok/chat',
-    VOICE_CHAT: '/api/voice-chat',
-    VOICE_TO_TEXT: '/api/voice-to-text',
+    CHATGPT: "/api/chatgpt/chat",
+    GEMINI: "/api/gemini/chat",
+    GROK: "/api/grok/chat",
+    VOICE_CHAT: "/api/voice-chat",
+    VOICE_TO_TEXT: "/api/voice-to-text",
   },
 };
-

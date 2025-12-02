@@ -19,7 +19,6 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../../contexts/LanguageContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { clearOnboardingData } from '../../utils/onboarding';
 
 export default function RegisterScreen() {
   const [dimensions, setDimensions] = useState(Dimensions.get('window'));
@@ -74,13 +73,7 @@ export default function RegisterScreen() {
     setError('');
 
     try {
-      // Register the new user
       await register(email.trim(), password, fullName.trim(), confirmPassword);
-      
-      // Clear any existing onboarding data for fresh start
-      await clearOnboardingData();
-      
-      // Navigate to privacy terms (first-time setup)
       router.replace('/privacy_terms');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Registration failed');

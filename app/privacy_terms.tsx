@@ -13,6 +13,7 @@ import { router, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguage } from '../contexts/LanguageContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useSearchParams } from 'expo-router/build/hooks';
 
 export default function PrivacyTermsScreen() {
   const [agreedToTerms, setAgreedToTerms] = useState(false);
@@ -22,13 +23,8 @@ export default function PrivacyTermsScreen() {
 const handleAcceptTerms = async () => {
   if (!agreedToTerms || !agreedToVoiceProcessing) return;
   
-  try {
-    await AsyncStorage.setItem('@ophelia_terms_accepted', 'true');
-    console.log('Terms saved successfully');
-    router.replace('/ai_model');
-  } catch (error) {
-    console.error('Error saving terms:', error);
-  }
+  await AsyncStorage.setItem('@ophelia_terms_accepted', 'true');
+  router.replace('/ai_model');
 };
 
 

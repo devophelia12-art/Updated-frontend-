@@ -42,11 +42,12 @@ export default function AIModelScreen() {
   // Handle selection of AI model
   const handleSelect = async () => {
     try {
+      // Save the selected model in AsyncStorage (using the correct key)
       await AsyncStorage.setItem('@ophelia_selected_model', selectedModel);
-      console.log('Model saved successfully:', selectedModel);
-      router.replace('/chat');
     } catch (error) {
-      console.error('Error saving selected AI model:', error);
+      console.log('Error saving selected AI model:', error);
+    } finally {
+      // Navigate to chat screen after model selection (user is already logged in)
       router.replace('/chat');
     }
   };

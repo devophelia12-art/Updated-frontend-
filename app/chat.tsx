@@ -15,13 +15,11 @@ import {
   Animated,
   Keyboard,
   Image,
-  Dimensions,
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Audio } from 'expo-av';
-import * as Speech from 'expo-speech';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
 import { router } from 'expo-router';
@@ -30,38 +28,35 @@ import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '../config/api';
 
 const STORAGE_KEY = '@ophelia_selected_model';
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Local quick responses for common queries
-const QUICK_RESPONSES = {
-  'hello': 'Hi there!',
-  'hi': 'Hello!',
-  'how are you': 'I\'m doing great!',
+// Quick responses
+const QUICK_RESPONSES: Record<string, string> = {
+  hello: 'Hi there!',
+  hi: 'Hello!',
+  'how are you': "I'm doing great!",
   'what time': new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-  'thank you': 'You\'re welcome!',
-  'thanks': 'No problem!',
-  'bye': 'Goodbye!',
-  'goodbye': 'See you later!',
-  'help': 'How can I assist you?',
-  'weather': 'Check your weather app!',
-  'name': 'I\'m Ophelia, your AI assistant.',
+  'thank you': "You're welcome!",
+  thanks: 'No problem!',
+  bye: 'Goodbye!',
+  goodbye: 'See you later!',
+  help: 'How can I assist you?',
+  weather: 'Check your weather app!',
+  name: "I'm Ophelia, your AI assistant.",
 };
 
 const getQuickResponse = (text: string): string | null => {
-  const lowerText = text.toLowerCase().trim();
-  for (const [key, response] of Object.entries(QUICK_RESPONSES)) {
-    if (lowerText.includes(key)) {
-      return response;
-    }
+  const lower = text.toLowerCase().trim();
+  for (const [key, value] of Object.entries(QUICK_RESPONSES)) {
+    if (lower.includes(key)) return value;
   }
   return null;
 };
 
-const limitResponse = (text: string, maxChars: number = 40): string => {
-  if (text.length <= maxChars) return text;
-  const truncated = text.substring(0, maxChars);
-  const lastSpace = truncated.lastIndexOf(' ');
-  return lastSpace > 0 ? truncated.substring(0, lastSpace) + '...' : truncated + '...';
+const limitResponse = (text: string, max = 40): string => {
+  if (text.length <= max) return text;
+  const cut = text.substring(0, max);
+  const lastSpace = cut.lastIndexOf(' ');
+  return lastSpace > 10 ? cut.substring(0, lastSpace) + '...' : cut + '...';
 };
 
 interface Message {
@@ -72,71 +67,73 @@ interface Message {
   isTyping?: boolean;
 }
 
-/* Typing dots animation component */
+// Recording options with metering
+const RECORDING_OPTIONS: Audio.RecordingOptions = {
+  android: {
+    extension: '.m4a',
+    outputFormat: Audio.RECORDING_OPTION_ANDROID_OUTPUT_FORMAT_MPEG_4,
+    audioEncoder: Audio.RECORDING_OPTION_ANDROID_AUDIO_ENCODER_AAC,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+  },
+  ios: {
+    extension: '.m4a',
+    audioQuality: Audio.RECORDING_OPTION_IOS_AUDIO_QUALITY_HIGH,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    bitRate: 128000,
+    outputFormat: Audio.RECORDING_OPTION_IOS_OUTPUT_FORMAT_MPEG4AAC,
+  },
+  isMeteringEnabled: true,
+};
+
+// VAD thresholds
+const VAD_THRESHOLD = -38;
+const SILENCE_DURATION = 1500;
+const MIN_RECORD_DURATION = 1800;
+// When user speaks during playback (interruption)
+const INTERRUPT_THRESHOLD = -25;
+
+type RecordMode = 'idle' | 'simple' | 'assistant';
+
+/* Typing dots */
 const TypingDots: React.FC = () => {
-  const dot1 = useRef(new Animated.Value(0)).current;
-  const dot2 = useRef(new Animated.Value(0)).current;
-  const dot3 = useRef(new Animated.Value(0)).current;
+  const dots = [
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+    useRef(new Animated.Value(0)).current,
+  ];
 
   useEffect(() => {
-    const animate = (dot: Animated.Value, delay: number) => {
+    dots.forEach((dot, i) =>
       Animated.loop(
         Animated.sequence([
-          Animated.delay(delay),
+          Animated.delay(i * 150),
           Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
           Animated.timing(dot, { toValue: 0, duration: 300, useNativeDriver: true }),
         ])
-      ).start();
-    };
-    animate(dot1, 0);
-    animate(dot2, 150);
-    animate(dot3, 300);
-  }, [dot1, dot2, dot3]);
+      ).start()
+    );
+  }, []);
 
-  const getStyle = (dot: Animated.Value) => ({
+  const style = (dot: Animated.Value) => ({
     opacity: dot.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
     transform: [{ translateY: dot.interpolate({ inputRange: [0, 1], outputRange: [0, -6] }) }],
   });
 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-      <Animated.Text style={[{ fontSize: 20, color: '#fff', marginHorizontal: 2 }, getStyle(dot1)]}>•</Animated.Text>
-      <Animated.Text style={[{ fontSize: 20, color: '#fff', marginHorizontal: 2 }, getStyle(dot2)]}>•</Animated.Text>
-      <Animated.Text style={[{ fontSize: 20, color: '#fff', marginHorizontal: 2 }, getStyle(dot3)]}>•</Animated.Text>
+      {dots.map((d, i) => (
+        <Animated.Text key={i} style={[{ fontSize: 20, color: '#fff', marginHorizontal: 2 }, style(d)]}>
+          •
+        </Animated.Text>
+      ))}
     </View>
   );
 };
 
-/* Minimal markdown renderer for **bold** text */
-const MarkdownText: React.FC<{ text: string; style?: any }> = ({ text, style }) => {
-  const parseMarkdown = (txt: string): React.ReactNode[] => {
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let key = 0;
-    const boldRegex = /\*\*([^*]+?)\*\*/g;
-    let match;
-    while ((match = boldRegex.exec(txt)) !== null) {
-      if (match.index > lastIndex) {
-        const beforeText = txt.substring(lastIndex, match.index);
-        if (beforeText) parts.push(beforeText);
-      }
-      parts.push(
-        <Text key={key++} style={{ fontWeight: 'bold' }}>
-          {match[1]}
-        </Text>
-      );
-      lastIndex = match.index + match[0].length;
-    }
-    if (lastIndex < txt.length) {
-      parts.push(txt.substring(lastIndex));
-    }
-    if (parts.length === 0) return [txt];
-    return parts;
-  };
-  return <Text style={style}>{parseMarkdown(text)}</Text>;
-};
-
-/* Animated message wrapper */
+/* Animated message */
 const AnimatedMessage: React.FC<{ message: Message; isUser: boolean }> = ({ message, isUser }) => {
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(30)).current;
@@ -147,10 +144,10 @@ const AnimatedMessage: React.FC<{ message: Message; isUser: boolean }> = ({ mess
       translateY.setValue(30);
       Animated.parallel([
         Animated.timing(opacity, { toValue: 1, duration: 300, useNativeDriver: true }),
-        Animated.spring(translateY, { toValue: 0, friction: 6, tension: 100, useNativeDriver: true }),
+        Animated.spring(translateY, { toValue: 0, friction: 7, useNativeDriver: true }),
       ]).start();
     }
-  }, [message.id, isUser, message.isTyping, opacity, translateY]);
+  }, [message.id]);
 
   const animatedStyle = isUser || message.isTyping ? {} : { opacity, transform: [{ translateY }] };
 
@@ -161,7 +158,7 @@ const AnimatedMessage: React.FC<{ message: Message; isUser: boolean }> = ({ mess
           <TypingDots />
         ) : (
           <>
-            <MarkdownText text={message.text} style={styles.messageText} />
+            <Text style={styles.messageText}>{message.text}</Text>
             <Text style={styles.messageTime}>{message.timestamp}</Text>
           </>
         )}
@@ -174,55 +171,67 @@ export default function ChatScreen() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [selectedModel, setSelectedModel] = useState('grok');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+
+  // Voice assistant modal
   const [showVoiceModal, setShowVoiceModal] = useState(false);
-  const [showFullScreenVocal, setShowFullScreenVocal] = useState(false);
   const [voiceTranscript, setVoiceTranscript] = useState('');
   const [voiceResponse, setVoiceResponse] = useState('');
-  const scrollViewRef = useRef<ScrollView | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isThinking, setIsThinking] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+
+  // Simple mic→text UI state
+  const [isRecordingSimpleUI, setIsRecordingSimpleUI] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
+  const scrollRef = useRef<ScrollView | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
-  const currentSoundRef = useRef<Audio.Sound | null>(null);
-  const textInputRef = useRef<TextInput | null>(null);
+
+  // Single global recording + mode (assistant or simple)
+  const recordingRef = useRef<Audio.Recording | null>(null);
+  const [recordMode, setRecordMode] = useState<RecordMode>('idle');
+  const isCreatingRecordingRef = useRef(false);
+
+  // Separate recording just for interruption detection during playback
+  const monitorRecRef = useRef<Audio.Recording | null>(null);
+  const isHandlingInterruptRef = useRef(false);
+
+  const currentSound = useRef<Audio.Sound | null>(null);
+
+  const [lastVoiceActivity, setLastVoiceActivity] = useState(0);
+  const [recordStartTime, setRecordStartTime] = useState(0);
 
   const auth = useAuth();
   const { selectedLanguage } = useLanguage();
-  const { chatGPT, gemini, grok, voiceChat, voiceToText } = auth || {};
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [selectedVoice, setSelectedVoice] = useState<'female' | 'male'>('male');
+  const { voiceChat, voiceToText } = auth || {};
+  const [selectedVoice] = useState<'female' | 'male'>('male');
 
-  // Load saved preferences
+  // Load saved model
   useFocusEffect(
     React.useCallback(() => {
-      const loadPreferences = async () => {
-        try {
-          const savedModel = await AsyncStorage.getItem(STORAGE_KEY);
-          if (savedModel) setSelectedModel(savedModel);
-          const savedVoice = await AsyncStorage.getItem('selectedVoice');
-          if (savedVoice === 'female' || savedVoice === 'male') setSelectedVoice(savedVoice);
-        } catch (err) {
-          console.error('Failed to load preferences', err);
-        }
+      const load = async () => {
+        const savedModel = await AsyncStorage.getItem(STORAGE_KEY);
+        if (savedModel) setSelectedModel(savedModel);
       };
-      loadPreferences();
+      load();
     }, [])
   );
 
-  // helper: scroll to end (multiple tries for keyboard)
+  // Scroll helpers
   const scrollToEnd = () => {
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 80);
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 250);
-    setTimeout(() => scrollViewRef.current?.scrollToEnd({ animated: true }), 450);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 250);
   };
 
   useEffect(() => {
-    const showSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
-      scrollToEnd();
-    });
-    const hideSub = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
-      // no-op
-    });
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      scrollToEnd
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {}
+    );
     return () => {
       showSub.remove();
       hideSub.remove();
@@ -233,346 +242,504 @@ export default function ChatScreen() {
     if (messages.length > 0) scrollToEnd();
   }, [messages.length]);
 
-  // Send message
-  const handleSendMessage = async () => {
-    if (!inputText.trim() || isLoading || !chatGPT) return;
-
-    Keyboard.dismiss();
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      text: inputText.trim(),
-      isUser: true,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessages(prev => [...prev, userMessage]);
-    scrollToEnd();
-
-    const typingId = (Date.now() + 1).toString();
-    const typingMsg: Message = { id: typingId, text: '', isUser: false, timestamp: '', isTyping: true };
-    setMessages(prev => [...prev, typingMsg]);
-    scrollToEnd();
-
-    const messageText = inputText.trim();
-    setInputText('');
-    setIsLoading(true);
-
-    try {
-      let response;
-      const language = selectedLanguage || 'en';
-      if (selectedModel === 'gpt4' && chatGPT) response = await chatGPT(messageText, language);
-      else if (selectedModel === 'gemini-pro' && gemini) response = await gemini(messageText, language);
-      else if (selectedModel === 'grok' && grok) response = await grok(messageText, language);
-
-      const aiResponse: Message = {
-        id: (Date.now() + 2).toString(),
-        text: response?.response || response?.message || 'Sorry, I could not process your request.',
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setMessages(prev => prev.filter(m => m.id !== typingId).concat(aiResponse));
-      scrollToEnd();
-    } catch (err) {
-      console.error('Chat API Error:', err);
-      const errMsg: Message = {
-        id: (Date.now() + 2).toString(),
-        text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setMessages(prev => prev.filter(m => m.id !== typingId).concat(errMsg));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Settings navigation
-  const handleSettings = () => router.push('/settings');
-
-  // Voice modal open
-  const handleVocalPress = () => {
-    Keyboard.dismiss();
-    setTimeout(() => setShowVoiceModal(true), Platform.OS === 'ios' ? 300 : 200);
-  };
-
-  // Close modal + cleanup
-  const closeVoiceModal = async () => {
-    try {
-      Speech.stop();
-    } catch (e) {}
-    try {
-      if (currentSoundRef.current) {
-        await currentSoundRef.current.stopAsync();
-        await currentSoundRef.current.unloadAsync();
-        currentSoundRef.current = null;
-      }
-    } catch (e) {}
-    setShowVoiceModal(false);
-    setVoiceTranscript('');
-    setVoiceResponse('');
-    if (isRecording && recording) {
-      try {
-        setIsRecording(false);
-        const status = await recording.getStatusAsync();
-        if (status.isRecording) await recording.stopAndUnloadAsync();
-        else await recording.unloadAsync();
-      } catch (err) {
-        console.error('Error stopping recording on modal close:', err);
-      }
-      setRecording(null);
-    }
-  };
-
-  // Pulse animation for recording
+  // Pulse animation for center orb in modal
   useEffect(() => {
-    if (isRecording && (showVoiceModal || showFullScreenVocal)) {
-      const loop = Animated.loop(
+    let loop: Animated.CompositeAnimation | null = null;
+    if (showVoiceModal && (isListening || isThinking || isSpeaking)) {
+      loop = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, { toValue: 1.2, duration: 1000, useNativeDriver: true }),
-          Animated.timing(pulseAnim, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
         ])
       );
       loop.start();
-      return () => loop.stop();
     } else {
-      Animated.timing(pulseAnim, { toValue: 1, duration: 200, useNativeDriver: true }).start();
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
     }
-  }, [isRecording, showVoiceModal, showFullScreenVocal, pulseAnim]);
+    return () => {
+      loop?.stop();
+    };
+  }, [showVoiceModal, isListening, isThinking, isSpeaking, pulseAnim]);
 
-  // Voice helpers (start/stop) - keep your original behavior (use auth.voiceChat/voiceToText)
-  const handleVoicePress = async () => {
-    if (showVoiceModal) return;
-    if (isLoading || isTranscribing) return;
+  // Silence detection (assistant mode only)
+  useEffect(() => {
+    if (!isListening || recordMode !== 'assistant') return;
+    const id = setInterval(() => {
+      const silentFor = Date.now() - lastVoiceActivity;
+      const duration = Date.now() - recordStartTime;
+      if (silentFor > SILENCE_DURATION && duration > MIN_RECORD_DURATION) {
+        stopAndProcessAssistant();
+      }
+    }, 250);
+    return () => clearInterval(id);
+  }, [isListening, recordMode, lastVoiceActivity, recordStartTime]);
+
+  // Auto-start listening when modal open
+  useEffect(() => {
+    if (showVoiceModal && !isListening && !isThinking && !isSpeaking) {
+      startListeningAssistant();
+    }
+  }, [showVoiceModal]);
+
+  // ============== CLEANUP HELPERS ==============
+
+  const destroyRecording = async () => {
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    setRecordMode('idle');
+
+    if (!rec) return;
+
     try {
-      if (isRecording) await stopRecordingAndTranscribe();
-      else await startRecording();
-    } catch (err) {
-      console.error('Voice error:', err);
-      setIsRecording(false);
-      setRecording(null);
-      setIsTranscribing(false);
-    }
-  };
+      let status: Audio.RecordingStatus | null = null;
+      try {
+        status = await rec.getStatusAsync();
+      } catch (e) {
+        console.log('getStatusAsync failed (safe to ignore):', e);
+      }
 
-  const stopRecordingAndTranscribe = async () => {
-    if (!recording) {
-      setIsRecording(false);
-      return;
-    }
-    const r = recording;
-    setIsRecording(false);
-    setRecording(null);
-    setIsTranscribing(true);
-
-    try {
-      const status = await r.getStatusAsync();
-      if (status.isRecording) await r.stopAndUnloadAsync();
-      else await r.unloadAsync();
-
-      const uri = r.getURI();
-      if (uri) {
+      if (status && status.isRecording) {
         try {
-          const transcribedText = await (voiceToText ? voiceToText(uri) : Promise.resolve(''));
-          if (transcribedText && transcribedText.trim()) {
-            setInputText(transcribedText.trim());
-            textInputRef.current?.focus();
-          } else {
-            Alert.alert('No text', 'No text was transcribed. Please try again.');
-          }
-        } catch (transErr) {
-          console.error('Voice-to-text error:', transErr);
-          Alert.alert('Transcription failed', transErr instanceof Error ? transErr.message : 'Failed to transcribe audio');
+          await rec.stopAndUnloadAsync();
+        } catch (e) {
+          console.log('stopAndUnloadAsync failed (safe):', e);
         }
       } else {
-        Alert.alert('Recording failed', 'Recording URI missing. Try again.');
+        try {
+          await rec.unloadAsync();
+        } catch (e) {
+          console.log('unloadAsync failed (safe):', e);
+        }
       }
-    } catch (err) {
-      console.error('Failed to process voice recording:', err);
-      Alert.alert('Error', 'Failed to process recording. Please try again.');
-    } finally {
-      setIsTranscribing(false);
+    } catch (e) {
+      console.log('destroyRecording outer error (ignored):', e);
     }
   };
 
-  const startRecording = async () => {
+  const destroyMonitorRecording = async () => {
+    const rec = monitorRecRef.current;
+    monitorRecRef.current = null;
+    if (!rec) return;
     try {
-      if (isRecording) return;
-
+      let status: Audio.RecordingStatus | null = null;
       try {
-        Speech.stop();
-      } catch (e) {}
-
-      try {
-        if (currentSoundRef.current) {
-          await currentSoundRef.current.stopAsync();
-          await currentSoundRef.current.unloadAsync();
-          currentSoundRef.current = null;
-        }
-      } catch (e) {}
-
-      if (recording) {
-        try {
-          const s = await recording.getStatusAsync();
-          if (s.isRecording) await recording.stopAndUnloadAsync();
-          else await recording.unloadAsync();
-        } catch (e) {}
-        setRecording(null);
-        setIsRecording(false);
+        status = await rec.getStatusAsync();
+      } catch (e) {
+        console.log('monitor getStatusAsync failed:', e);
       }
+      if (status && status.isRecording) {
+        try {
+          await rec.stopAndUnloadAsync();
+        } catch (e) {
+          console.log('monitor stopAndUnloadAsync failed:', e);
+        }
+      } else {
+        try {
+          await rec.unloadAsync();
+        } catch (e) {
+          console.log('monitor unloadAsync failed:', e);
+        }
+      }
+    } catch (e) {
+      console.log('destroyMonitorRecording error:', e);
+    }
+  };
 
-      const permission = await Audio.requestPermissionsAsync();
-      if (!permission.granted) {
-        Alert.alert('Microphone permission required', 'Please grant microphone permission in settings.');
+  const destroySound = async () => {
+    if (!currentSound.current) return;
+    try {
+      await currentSound.current.stopAsync();
+      await currentSound.current.unloadAsync();
+    } catch (e) {
+      console.log('destroySound error:', e);
+    } finally {
+      currentSound.current = null;
+    }
+  };
+
+  // ============== TEXT CHAT (UNCHANGED) ==============
+
+  const handleSendMessage = () => {
+    const text = inputText.trim();
+    if (!text) return;
+
+    Keyboard.dismiss();
+
+    const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const userMsg: Message = { id: Date.now().toString(), text, isUser: true, timestamp: now };
+
+    const quick = getQuickResponse(text);
+    const aiText = quick || limitResponse(`You said: ${text}`, 80);
+    const aiMsg: Message = {
+      id: (Date.now() + 1).toString(),
+      text: aiText,
+      isUser: false,
+      timestamp: now,
+    };
+
+    setMessages(prev => [...prev, userMsg, aiMsg]);
+    setInputText('');
+  };
+
+  const handleSettings = () => router.push('/settings');
+
+  // ============== SIMPLE MIC → TEXT (MIC ICON) ==============
+
+  const handleMicPress = async () => {
+    if (isTranscribing) return;
+
+    if (isRecordingSimpleUI) {
+      await stopSimpleRecordingAndTranscribe();
+    } else {
+      await startSimpleRecording();
+    }
+  };
+
+  const startSimpleRecording = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        Alert.alert('Not supported', 'Recording is not supported on web browser.');
         return;
       }
 
-      // setup audio mode
+      if (showVoiceModal) {
+        Alert.alert('Busy', 'Voice assistant is active. Close it first.');
+        return;
+      }
+
+      await destroyRecording();
+      await destroyMonitorRecording();
+
+      const perm = await Audio.requestPermissionsAsync();
+      if (perm.status !== 'granted') {
+        Alert.alert('Mic Permission', 'Please allow microphone access.');
+        return;
+      }
+
       await Audio.setAudioModeAsync({
         allowsRecordingIOS: true,
         playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
+        interruptionModeIOS: 2,
+        interruptionModeAndroid: 2,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
       });
 
-      // small delay to stabilize
-      await new Promise(res => setTimeout(res, 100));
-
-      const { recording: newRecording } = await Audio.Recording.createAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-      setRecording(newRecording);
-      setIsRecording(true);
+      const { recording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      recordingRef.current = recording;
+      setRecordMode('simple');
+      setIsRecordingSimpleUI(true);
     } catch (err) {
-      console.error('Failed to start recording:', err);
-      setIsRecording(false);
-      setRecording(null);
-      try {
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: false, playsInSilentModeIOS: true, staysActiveInBackground: false });
-      } catch (e) {}
-      if (err instanceof Error && /Only one Recording/.test(err.message)) {
-        Alert.alert('Please wait', 'Previous recording is still cleaning up. Try again in a moment.');
-      }
+      console.error('startSimpleRecording error:', err);
+      Alert.alert('Error', 'Failed to start recording.');
+      setIsRecordingSimpleUI(false);
+      await destroyRecording();
     }
   };
 
-  const stopRecording = async () => {
-    if (!recording) {
-      setIsRecording(false);
+  const stopSimpleRecordingAndTranscribe = async () => {
+    if (!recordingRef.current || recordMode !== 'simple') {
+      setIsRecordingSimpleUI(false);
       return;
     }
 
-    const r = recording;
-    setIsRecording(false);
-    setRecording(null);
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    setRecordMode('idle');
+    setIsRecordingSimpleUI(false);
 
     try {
-      const status = await r.getStatusAsync();
-      if (status.isRecording) await r.stopAndUnloadAsync();
-      else await r.unloadAsync();
+      const s = await rec.getStatusAsync();
+      if (s.isRecording) await rec.stopAndUnloadAsync();
+      else await rec.unloadAsync();
 
-      const uri = r.getURI();
-      if (uri && voiceChat) {
-        setIsLoading(true);
-        try {
-          const language = selectedLanguage || 'en';
-          const result = await voiceChat(uri, selectedVoice, language);
+      const uri = rec.getURI();
+      if (!uri) {
+        Alert.alert('Error', 'Recording URI missing.');
+        return;
+      }
 
-          const userText = result.user_text || 'Voice message';
-          let responseText = result.response_text || 'Sorry, I could not process your voice message.';
-          
-          // Check for quick local response first
-          const quickResponse = getQuickResponse(userText);
-          if (quickResponse) {
-            responseText = quickResponse;
-          } else {
-            // Limit response to 40 characters for faster voice synthesis
-            responseText = limitResponse(responseText, 40);
-          }
+      if (!voiceToText) {
+        Alert.alert('Not configured', 'voiceToText is not available.');
+        return;
+      }
 
-          setVoiceTranscript(userText);
-          setVoiceResponse(responseText);
-
-          const userMessage: Message = {
-            id: Date.now().toString(),
-            text: userText,
-            isUser: true,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          const aiMessage: Message = {
-            id: (Date.now() + 1).toString(),
-            text: responseText,
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setMessages(prev => [...prev, userMessage, aiMessage]);
-
-          if (result.audio_url) {
-            try {
-              if (currentSoundRef.current) {
-                try {
-                  await currentSoundRef.current.stopAsync();
-                  await currentSoundRef.current.unloadAsync();
-                } catch (e) {}
-              }
-              const audioUrl = `${API_BASE_URL}${result.audio_url}`;
-              await Audio.setAudioModeAsync({
-                allowsRecordingIOS: false,
-                playsInSilentModeIOS: true,
-                staysActiveInBackground: false,
-                shouldDuckAndroid: true,
-                playThroughEarpieceAndroid: false,
-              });
-              const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true, volume: 1.0 });
-              currentSoundRef.current = sound;
-              sound.setOnPlaybackStatusUpdate(status => {
-                if (status.isLoaded && status.didJustFinish) {
-                  sound.unloadAsync();
-                  if (currentSoundRef.current === sound) currentSoundRef.current = null;
-                }
-              });
-            } catch (audioErr) {
-              console.error('Failed to play audio:', audioErr);
-            }
-          }
-          setTimeout(() => {
-            setVoiceTranscript('');
-            setVoiceResponse('');
-          }, 500);
-        } catch (voiceErr) {
-          console.error('Voice chat error:', voiceErr);
-          
-          // Fallback to local response on network error
-          const fallbackResponse = 'Sorry, network issue. Try again.';
-          setVoiceResponse(fallbackResponse);
-          
-          const errorMessage: Message = {
-            id: Date.now().toString(),
-            text: fallbackResponse,
-            isUser: false,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          };
-          setMessages(prev => [...prev, errorMessage]);
-          
-          setTimeout(() => {
-            setVoiceTranscript('');
-            setVoiceResponse('');
-          }, 2000);
-        } finally {
-          setIsLoading(false);
-        }
+      setIsTranscribing(true);
+      const text = await voiceToText(uri);
+      if (text && text.trim()) {
+        setInputText(text.trim());
       } else {
-        console.log('Missing URI or voiceChat', { uri: !!uri, voiceChat: !!voiceChat });
+        Alert.alert('No text', 'Could not detect speech. Try again.');
       }
     } catch (err) {
-      console.error('Failed to stop recording:', err);
-      setIsLoading(false);
+      console.error('stopSimpleRecordingAndTranscribe error:', err);
+      Alert.alert('Error', 'Failed to process recording.');
+    } finally {
+      setIsTranscribing(false);
+      await destroyRecording();
     }
   };
 
-  // UI
+  // ============== VOICE ASSISTANT (WAVEFORM ICON) ==============
+
+  const handleVocalPress = () => {
+    Keyboard.dismiss();
+    setTimeout(() => setShowVoiceModal(true), 200);
+  };
+
+  const startListeningAssistant = async () => {
+    try {
+      if (Platform.OS === 'web') {
+        Alert.alert('Not supported', 'Voice assistant only works on Android/iOS.');
+        return;
+      }
+
+      if (isCreatingRecordingRef.current) {
+        console.log('⚠️ startListeningAssistant: already starting, skip');
+        return;
+      }
+      isCreatingRecordingRef.current = true;
+
+      if (recordMode !== 'idle') {
+        await destroyRecording();
+      }
+      await destroyMonitorRecording();
+
+      const existing = await Audio.getPermissionsAsync();
+      let perm = existing;
+      if (existing.status !== 'granted') {
+        perm = await Audio.requestPermissionsAsync();
+      }
+
+      if (perm.status !== 'granted') {
+        Alert.alert(
+          'Microphone Permission',
+          `Microphone access is not granted (status: ${perm.status}). Please enable it in settings.`
+        );
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: 2,
+        interruptionModeAndroid: 2,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: false,
+      });
+
+      console.log('🎙 Creating assistant recording…');
+      const { recording } = await Audio.Recording.createAsync(RECORDING_OPTIONS);
+
+      recording.setOnRecordingStatusUpdate((status: Audio.RecordingStatus) => {
+        if (
+          status.isRecording &&
+          typeof status.metering === 'number' &&
+          status.metering > VAD_THRESHOLD
+        ) {
+          setLastVoiceActivity(Date.now());
+        }
+      });
+
+      recordingRef.current = recording;
+      setRecordMode('assistant');
+      setRecordStartTime(Date.now());
+      setLastVoiceActivity(Date.now());
+      setIsListening(true);
+      setIsThinking(false);
+      setIsSpeaking(false);
+      console.log('✅ Assistant listening started');
+    } catch (err: any) {
+      console.error('❌ Failed to start listening assistant:', err);
+      Alert.alert(
+        'Microphone Error',
+        'Unable to start listening.\n\n' + (err?.message || 'Unknown error')
+      );
+      await destroyRecording();
+      setIsListening(false);
+    } finally {
+      isCreatingRecordingRef.current = false;
+    }
+  };
+
+  const stopAndProcessAssistant = async () => {
+    if (!recordingRef.current || recordMode !== 'assistant') return;
+
+    const rec = recordingRef.current;
+    recordingRef.current = null;
+    setRecordMode('idle');
+    setIsListening(false);
+    setIsThinking(true);
+
+    try {
+      const s = await rec.getStatusAsync();
+      if (s.isRecording) await rec.stopAndUnloadAsync();
+      else await rec.unloadAsync();
+
+      const uri = rec.getURI();
+      if (!uri || !voiceChat) {
+        setIsThinking(false);
+        return;
+      }
+
+      const language = selectedLanguage || 'en';
+      const result = await voiceChat(uri, selectedVoice, language);
+
+      const userText = result.user_text || '…';
+      let aiText = result.response_text || "I didn't catch that.";
+
+      const quick = getQuickResponse(userText);
+      if (quick) aiText = quick;
+      else aiText = limitResponse(aiText);
+
+      setVoiceTranscript(userText);
+      setVoiceResponse(aiText);
+
+      const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      setMessages(prev => [
+        ...prev,
+        { id: Date.now().toString(), text: userText, isUser: true, timestamp: now },
+        { id: (Date.now() + 1).toString(), text: aiText, isUser: false, timestamp: now },
+      ]);
+
+      if (result.audio_url) {
+        await playAIResponseAssistant(`${API_BASE_URL}${result.audio_url}`);
+      } else {
+        setIsThinking(false);
+        setVoiceTranscript('');
+        setVoiceResponse('');
+        if (showVoiceModal) startListeningAssistant();
+      }
+    } catch (err) {
+      console.error('Voice assistant error:', err);
+      setIsThinking(false);
+      if (showVoiceModal) startListeningAssistant();
+    }
+  };
+
+  const handlePlaybackInterrupted = async () => {
+    if (isHandlingInterruptRef.current) return;
+    isHandlingInterruptRef.current = true;
+    console.log('🛑 User interruption detected during playback');
+    try {
+      await destroySound();
+      await destroyMonitorRecording();
+      setIsSpeaking(false);
+      setVoiceTranscript('');
+      setVoiceResponse('');
+      if (showVoiceModal) {
+        await startListeningAssistant();
+      }
+    } catch (e) {
+      console.log('handlePlaybackInterrupted error:', e);
+    } finally {
+      isHandlingInterruptRef.current = false;
+    }
+  };
+
+  const playAIResponseAssistant = async (url: string) => {
+    try {
+      await destroyRecording();        // no assistant recording while speaking
+      await destroySound();
+      await destroyMonitorRecording();
+
+      setIsSpeaking(true);
+      setIsThinking(false);
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        interruptionModeIOS: 2,
+        interruptionModeAndroid: 2,
+        shouldDuckAndroid: false,
+        playThroughEarpieceAndroid: true,
+      });
+
+      console.log('🎧 Playing URL:', url);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: url },
+        { shouldPlay: true }
+      );
+      currentSound.current = sound;
+
+      // Start a separate recording just to detect user talking (interruption)
+      const { recording: monitorRec } = await Audio.Recording.createAsync({
+        ...RECORDING_OPTIONS,
+        isMeteringEnabled: true,
+      });
+      monitorRecRef.current = monitorRec;
+
+      monitorRec.setOnRecordingStatusUpdate((status: Audio.RecordingStatus) => {
+        if (
+          status.isRecording &&
+          typeof status.metering === 'number' &&
+          status.metering > INTERRUPT_THRESHOLD
+        ) {
+          // User started talking → interrupt
+          handlePlaybackInterrupted();
+        }
+      });
+
+      sound.setOnPlaybackStatusUpdate(async (status: any) => {
+        if (!status.isLoaded) return;
+        if (status.didJustFinish) {
+          console.log('🔚 Playback finished');
+          await destroyMonitorRecording();
+          await destroySound();
+          setIsSpeaking(false);
+          setVoiceTranscript('');
+          setVoiceResponse('');
+          if (showVoiceModal) {
+            startListeningAssistant();
+          }
+        }
+      });
+    } catch (err) {
+      console.log('playAIResponseAssistant error:', err);
+      setIsSpeaking(false);
+      await destroyMonitorRecording();
+      await destroySound();
+      if (showVoiceModal) startListeningAssistant();
+    }
+  };
+
+  const closeVoiceModal = async () => {
+    try {
+      await destroyRecording();
+      await destroyMonitorRecording();
+      await destroySound();
+    } catch (e) {
+      console.log('Error closing voice modal:', e);
+    } finally {
+      setShowVoiceModal(false);
+      setIsListening(false);
+      setIsThinking(false);
+      setIsSpeaking(false);
+      setVoiceTranscript('');
+      setVoiceResponse('');
+    }
+  };
+
+  // ============== RENDER ==============
+
   return (
-    <ImageBackground source={require('../assets/images/background.png')} style={styles.background} resizeMode="cover">
+    <ImageBackground
+      source={require('../assets/images/background.png')}
+      style={styles.background}
+      resizeMode="cover"
+    >
       <StatusBar barStyle="light-content" />
       <View style={styles.centerOrbWrapper} pointerEvents="none">
-        <Image source={require('../assets/images/vocal_circle.png')} style={styles.centerOrb} resizeMode="contain" />
+        <Image
+          source={require('../assets/images/vocal_circle.png')}
+          style={styles.centerOrb}
+          resizeMode="contain"
+        />
       </View>
 
       <SafeAreaView style={styles.container}>
@@ -587,19 +754,27 @@ export default function ChatScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Messages */}
-        <View style={styles.messagesWrapper}>
-          <ScrollView ref={scrollViewRef} style={styles.messagesContainer} contentContainerStyle={{ paddingBottom: 16 }} keyboardShouldPersistTaps="handled">
-            {messages.map(msg => <AnimatedMessage key={msg.id} message={msg} isUser={msg.isUser} />)}
+        {/* Chat + Input */}
+        <KeyboardAvoidingView
+          style={styles.chatContainer}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+        >
+          <ScrollView
+            ref={scrollRef}
+            style={styles.messagesContainer}
+            contentContainerStyle={{ paddingBottom: 16 }}
+            keyboardShouldPersistTaps="handled"
+          >
+            {messages.map(msg => (
+              <AnimatedMessage key={msg.id} message={msg} isUser={msg.isUser} />
+            ))}
           </ScrollView>
-        </View>
 
-        {/* Input bar - Fixed at bottom */}
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
+          {/* Input bar with 3 icons */}
           <View style={styles.inputWrapperBar}>
             <LinearGradient colors={['transparent', 'transparent']} style={styles.inputContainer}>
               <TextInput
-                ref={textInputRef}
                 style={styles.textInput}
                 placeholder="Ask here..."
                 placeholderTextColor="#FFFFFF"
@@ -607,37 +782,52 @@ export default function ChatScreen() {
                 onChangeText={setInputText}
                 multiline
                 maxLength={500}
-                returnKeyType="send"
-                onSubmitEditing={handleSendMessage}
               />
-              <TouchableOpacity 
-                style={[styles.sendButton, (!inputText.trim() || isLoading) && styles.sendDisabled]} 
-                onPress={handleSendMessage} 
-                disabled={!inputText.trim() || isLoading}
+
+              {/* Send icon */}
+              <TouchableOpacity
+                style={[styles.iconButton, !inputText.trim() && styles.disabledButton]}
+                onPress={handleSendMessage}
+                disabled={!inputText.trim()}
               >
-                <Ionicons 
-                  name="paper-plane-outline" 
-                  size={22} 
-                  color={(!inputText.trim() || isLoading) ? "#999" : "#212121"} 
+                <Ionicons
+                  name="paper-plane-outline"
+                  size={22}
+                  color={!inputText.trim() ? '#999' : '#212121'}
                 />
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.voiceButton, isRecording && styles.recordingButton]} onPress={handleVoicePress}>
-                <Ionicons name={isRecording ? 'mic' : 'mic-outline'} size={22} color="#212121" />
+              {/* Mic icon (simple voice→text) */}
+              <TouchableOpacity
+                style={[
+                  styles.iconButton,
+                  isRecordingSimpleUI && { backgroundColor: '#ffdede' },
+                ]}
+                onPress={handleMicPress}
+                disabled={isTranscribing}
+              >
+                <Ionicons
+                  name={isRecordingSimpleUI ? 'mic' : 'mic-outline'}
+                  size={22}
+                  color="#212121"
+                />
               </TouchableOpacity>
 
+              {/* Waveform icon (full voice assistant) */}
               <TouchableOpacity style={styles.vocalButton} onPress={handleVocalPress}>
-                <View style={styles.waveformContainer}>
-                  <View style={[styles.waveBar, styles.waveBar1, { marginRight: 3 }]} />
-                  <View style={[styles.waveBar, styles.waveBar2, { marginRight: 3 }]} />
-                  <View style={[styles.waveBar, styles.waveBar3]} />
+                <View className="wave">
+                  <View style={styles.waveformContainer}>
+                    <View style={[styles.waveBar, styles.waveBar1, { marginRight: 3 }]} />
+                    <View style={[styles.waveBar, styles.waveBar2, { marginRight: 3 }]} />
+                    <View style={[styles.waveBar, styles.waveBar3]} />
+                  </View>
                 </View>
               </TouchableOpacity>
             </LinearGradient>
           </View>
         </KeyboardAvoidingView>
 
-        {/* Voice Modal */}
+        {/* Voice Assistant Modal */}
         {showVoiceModal && (
           <View style={styles.voiceModal}>
             <TouchableOpacity style={styles.closeButton} onPress={closeVoiceModal}>
@@ -654,27 +844,26 @@ export default function ChatScreen() {
                 </View>
               ) : null}
 
-              {isLoading ? (
-                <View style={styles.loadingContainer}>
-                  <Animated.View style={[styles.loadingDot, { opacity: pulseAnim }]} />
-                  <Text style={styles.loadingText}>Processing...</Text>
-                </View>
-              ) : voiceResponse ? (
+              {voiceResponse ? (
                 <View style={styles.responseContainer}>
                   <Text style={styles.responseLabel}>Ophelia:</Text>
                   <Text style={styles.responseText}>{voiceResponse}</Text>
                 </View>
-              ) : (
-                <>
-                  <Animated.View style={[styles.voiceCircle, { transform: [{ scale: pulseAnim }] }]} />
+              ) : null}
 
-                  <Text style={styles.voiceStatus}>{isRecording ? 'Listening...' : 'Tap to speak'}</Text>
+              <Animated.View
+                style={[styles.voiceCircle, { transform: [{ scale: pulseAnim }] }]}
+              />
 
-                  <TouchableOpacity style={[styles.voiceRecordButton, isRecording && styles.voiceRecordingButton]} onPress={isRecording ? stopRecording : startRecording}>
-                    <Ionicons name={isRecording ? 'stop-circle' : 'mic'} size={40} color="white" />
-                  </TouchableOpacity>
-                </>
-              )}
+              <Text style={styles.voiceStatus}>
+                {isListening
+                  ? 'Listening...'
+                  : isThinking
+                  ? 'Thinking...'
+                  : isSpeaking
+                  ? 'Speaking...'
+                  : 'Ready'}
+              </Text>
             </View>
           </View>
         )}
@@ -701,7 +890,7 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: 13, color: '#D1D1D1', marginTop: 2 },
   settingsButton: { padding: 8 },
 
-  messagesWrapper: { flex: 1 },
+  chatContainer: { flex: 1 },
   messagesContainer: { flex: 1, paddingHorizontal: 14, paddingTop: 12 },
 
   messageContainer: { marginBottom: 12 },
@@ -710,15 +899,11 @@ const styles = StyleSheet.create({
   aiMessage: { alignSelf: 'flex-start' },
   userBubble: { backgroundColor: '#8B5CF6' },
   aiBubble: { backgroundColor: 'rgba(42,42,42,0.9)' },
-
   messageText: { color: '#fff', fontSize: 16, lineHeight: 22 },
   messageTime: { color: '#B0B0B0', fontSize: 12, marginTop: 6 },
 
-  /* Input bar wrapper fixed at bottom */
   inputWrapperBar: {
-    paddingHorizontal: 0,
     paddingBottom: Platform.OS === 'ios' ? 20 : 10,
-    backgroundColor: 'transparent',
   },
   inputContainer: {
     flexDirection: 'row',
@@ -727,43 +912,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)', // semi-transparent input background
+    backgroundColor: 'rgba(0,0,0,0.5)',
     width: '100%',
   },
-
   textInput: {
     flex: 1,
     fontSize: 16,
     color: '#fff',
     paddingHorizontal: 12,
-    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
     maxHeight: 120,
   },
 
-  sendButton: {
+  iconButton: {
     marginLeft: 8,
     padding: 8,
     borderRadius: 12,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  sendDisabled: {
-    opacity: 0.5,
-  },
-
-  voiceButton: {
-    marginLeft: 8,
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#E8E8E8',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  recordingButton: {
-    backgroundColor: '#ffdede',
-    borderColor: '#ff4444',
-  },
+  disabledButton: { opacity: 0.5 },
 
   vocalButton: {
     marginLeft: 8,
@@ -773,46 +941,61 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  waveformContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', height: 20 },
+  waveformContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 20,
+  },
   waveBar: { width: 3, backgroundColor: '#212121', borderRadius: 2 },
   waveBar1: { height: 12 },
   waveBar2: { height: 18 },
   waveBar3: { height: 14 },
 
-  /* Voice modal */
   voiceModal: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0,0,0,0.92)',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000,
   },
-  closeButton: { position: 'absolute', top: 48, right: 20, padding: 10, zIndex: 1001 },
+  closeButton: { position: 'absolute', top: 48, right: 20, padding: 10 },
   voiceContent: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20 },
 
-  voiceTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 28 },
-  voiceCircle: { width: 180, height: 180, borderRadius: 90, backgroundColor: 'rgba(139,92,246,0.18)', justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 2, borderColor: 'rgba(139,92,246,0.36)' },
-  voiceStatus: { fontSize: 16, color: 'white', marginBottom: 20, textAlign: 'center' },
-  voiceRecordButton: { width: 72, height: 72, borderRadius: 36, backgroundColor: 'rgba(139,92,246,0.84)', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: 'rgba(255,255,255,0.28)' },
-  voiceRecordingButton: { backgroundColor: '#ff4444' },
+  voiceTitle: { fontSize: 22, fontWeight: '700', color: '#fff', marginBottom: 20 },
+  voiceCircle: {
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: 'rgba(139,92,246,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginTop: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(139,92,246,0.36)',
+  },
+  voiceStatus: { fontSize: 16, color: 'white', marginTop: 20, textAlign: 'center' },
 
-  transcriptContainer: { backgroundColor: 'rgba(139,92,246,0.12)', padding: 14, borderRadius: 10, marginBottom: 14, maxWidth: '90%' },
+  transcriptContainer: {
+    backgroundColor: 'rgba(139,92,246,0.12)',
+    padding: 14,
+    borderRadius: 10,
+    marginBottom: 10,
+    maxWidth: '90%',
+  },
   transcriptLabel: { fontSize: 13, color: '#D0CDEB', marginBottom: 6 },
   transcriptText: { fontSize: 15, color: 'white', lineHeight: 20 },
 
-  loadingContainer: { alignItems: 'center', marginVertical: 18 },
-  loadingDot: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#8B5CF6', marginBottom: 8 },
-  loadingText: { fontSize: 14, color: 'white' },
-
-  responseContainer: { backgroundColor: 'rgba(42,42,42,0.85)', padding: 14, borderRadius: 10, marginTop: 12, maxWidth: '90%' },
+  responseContainer: {
+    backgroundColor: 'rgba(42,42,42,0.85)',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 8,
+    maxWidth: '90%',
+  },
   responseLabel: { fontSize: 13, color: '#B0B0B0', marginBottom: 6 },
   responseText: { fontSize: 15, color: 'white', lineHeight: 20 },
 
-  /* center orb background */
   centerOrbWrapper: {
     position: 'absolute',
     top: '50%',
