@@ -30,8 +30,7 @@
         "android.permission.CAMERA",
         "android.permission.INTERNET",
         "android.permission.MODIFY_AUDIO_SETTINGS"
-      ],
-      "package": "com.anonymous.ophelia"
+      ]
     },
     "web": {
       "output": "static",
@@ -41,15 +40,15 @@
       "expo-router",
       [
         "expo-splash-screen",
-          {
-            "image": "./assets/images/splash-icon.png",
-            "imageWidth": 200,
-            "resizeMode": "contain",
-            "backgroundColor": "#ffffff",
-            "dark": {
-              "backgroundColor": "#000000"
-            }
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#ffffff",
+          "dark": {
+            "backgroundColor": "#000000"
           }
+        }
       ],
       [
         "expo-audio",
@@ -61,10 +60,13 @@
     ],
     "experiments": {
       "typedRoutes": true,
-      "reactCompiler": true
+      "reactCompiler": false
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "eas": {
+        "projectId": "ec6f8e39-8832-47b5-8246-a9f55ae988e0"
+      }
     }
   }
 }
