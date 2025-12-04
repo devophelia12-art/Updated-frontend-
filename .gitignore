@@ -1,2 +1,50 @@
+# Expo
 .expo/
+.expo-shared/
+
+# Node
 node_modules/
+npm-debug.log
+yarn-error.log
+
+# Metro
+.metro-cache/
+
+# Android
+android/build/
+android/app/build/
+android/.gradle/
+android/app/src/main/assets/app.json
+android/app/src/main/assets/index.android.bundle
+
+# iOS
+ios/build/
+ios/Pods/
+
+# Build artifacts
+build/
+dist/
+
+# Keystores
+*.keystore
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+
+# IDE files
+.idea/
+.vscode/
+*.iml
+
+# macOS
+.DS_Store
+
+# Temporary files
+*.tmp
+*.patch
+*.orig
