@@ -22,3 +22,13 @@ allprojects {
 
 apply plugin: "expo-root-project"
 apply plugin: "com.facebook.react.rootproject"
+
+// ⬇️ Duplicate classes fix
+subprojects { subproject ->
+  subproject.configurations.all { config ->
+    config.exclude group: "com.android.support", module: "support-compat"
+    config.exclude group: "com.android.support", module: "support-v4"
+    config.exclude group: "com.android.support", module: "animated-vector-drawable"
+    config.exclude group: "com.android.support", module: "versionedparcelable"
+  }
+}

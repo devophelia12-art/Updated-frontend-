@@ -1,3 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
 <manifest
   xmlns:android="http://schemas.android.com/apk/res/android"
   xmlns:tools="http://schemas.android.com/tools">
@@ -29,7 +30,8 @@
     android:theme="@style/AppTheme"
     android:supportsRtl="true"
     android:enableOnBackInvokedCallback="false"
-    tools:replace="android:appComponentFactory">
+    tools:replace="android:appComponentFactory"
+    android:appComponentFactory="androidx.core.app.CoreComponentFactory">
 
     <meta-data
       android:name="expo.modules.updates.ENABLED"
@@ -59,7 +61,7 @@
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
         <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="ophellia" />
+        <data android:scheme="ophelia" />
       </intent-filter>
 
     </activity>

@@ -6,7 +6,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/ophelia logo.png",
-    "scheme": "ophellia",
+    "scheme": "ophelia",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {

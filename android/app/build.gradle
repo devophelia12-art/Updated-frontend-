@@ -87,9 +87,9 @@ android {
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
 
-    namespace 'com.anonymous.ophelia'
+    namespace 'com.ophelia'
     defaultConfig {
-        applicationId 'com.anonymous.ophelia'
+        applicationId 'com.ophelia'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode 1
